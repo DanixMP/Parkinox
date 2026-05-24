@@ -1,0 +1,316 @@
+/// Flutter Integration Example for Parkinox FastAPI
+///
+/// This file demonstrates how to integrate the FastAPI plate detection
+/// service with your Flutter application.
+
+import 'dart:io';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+/// Configuration for the API
+class ParkinoxApiConfig {
+  // Change this to your server IP when deploying
+  static const String baseUrl = 'http://localhost:8000';
+
+  // For Android emulator, use: http://10.0.2.2:8000
+  // For iOS simulator, use: http://localhost:8000
+  // For physical device, use: http://YOUR_COMPUTER_IP:8000
+}
+
+/// Response model for plate detection
+class PlateDetectionResult {
+  final bool success;
+  final String? plate;
+  final double confidence;
+  final double charConfidence;
+  final int numCharacters;
+  final List<int> bbox;
+  final String? message;
+
+  PlateDetectionResult({
+    required this.success,
+    this.plate,
+    required this.confidence,
+    required this.charConfidence,
+    required this.numCharacters,
+    required this.bbox,
+    this.message,
+  });
+
+  factory PlateDetectionResult.fromJson(Map<String, dynamic> json) {
+    return PlateDetectionResult(
+      success: json['success'] ?? false,
+      plate: json['plate'],
+      confidence: (json['confidence'] ?? 0.0).toDouble(),
+      charConfidence: (json['char_confidence'] ?? 0.0).toDouble(),
+      numCharacters: json['num_characters'] ?? 0,
+      bbox:
+          (json['bbox'] as List<dynamic>?)?.map((e) => e as int).toList() ?? [],
+      message: json['message'],
+    );
+  }
+
+  @override
+  String toString() {
+    return 'PlateDetectionResult(success: $success, plate: $plate, '
+        'confidence: ${confidence.toStringAsFixed(3)}, '
+        'charConfidence: ${charConfidence.toStringAsFixed(3)})';
+  }
+}
+
+/// Health check response
+class HealthCheckResult {
+  final String status;
+  final bool modelsLoaded;
+  final String? device;
+  final String version;
+
+  HealthCheckResult({
+    required this.status,
+    required this.modelsLoaded,
+    this.device,
+    required this.version,
+  });
+
+  factory HealthCheckResult.fromJson(Map<String, dynamic> json) {
+    return HealthCheckResult(
+      status: json['status'] ?? 'unknown',
+      modelsLoaded: json['models_loaded'] ?? false,
+      device: json['device'],
+      version: json['version'] ?? '1.0.0',
+    );
+  }
+
+  bool get isHealthy => status == 'ok' && modelsLoaded;
+}
+
+/// Main API service class
+class ParkinoxApiService {
+  final String baseUrl;
+
+  ParkinoxApiService({String? baseUrl})
+    : baseUrl = baseUrl ?? ParkinoxApiConfig.baseUrl;
+
+  /// Check if the API server is healthy and models are loaded
+  Future<HealthCheckResult> healthCheck() async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/health'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        return HealthCheckResult.fromJson(json.decode(response.body));
+      } else {
+        throw Exception('Health check failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Failed to connect to API: $e');
+    }
+  }
+
+  /// Detect license plate from image file
+  Future<PlateDetectionResult> detectPlate(File imageFile) async {
+    try {
+      // Create multipart request
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/detect'));
+
+      // Add image file
+      request.files.add(
+        await http.MultipartFile.fromPath('image', imageFile.path),
+      );
+
+      // Send request
+      var streamedResponse = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
+
+      // Get response
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        return PlateDetectionResult.fromJson(json.decode(response.body));
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['detail'] ?? 'Detection failed');
+      }
+    } catch (e) {
+      throw Exception('Failed to detect plate: $e');
+    }
+  }
+
+  /// Detect license plate from image bytes
+  Future<PlateDetectionResult> detectPlateFromBytes(
+    List<int> imageBytes,
+    String filename,
+  ) async {
+    try {
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/detect'));
+
+      request.files.add(
+        http.MultipartFile.fromBytes('image', imageBytes, filename: filename),
+      );
+
+      var streamedResponse = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
+
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        return PlateDetectionResult.fromJson(json.decode(response.body));
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['detail'] ?? 'Detection failed');
+      }
+    } catch (e) {
+      throw Exception('Failed to detect plate: $e');
+    }
+  }
+}
+
+/// Example usage in a Flutter widget
+///
+/// ```dart
+/// class PlateDetectionScreen extends StatefulWidget {
+///   @override
+///   _PlateDetectionScreenState createState() => _PlateDetectionScreenState();
+/// }
+///
+/// class _PlateDetectionScreenState extends State<PlateDetectionScreen> {
+///   final ParkinoxApiService _apiService = ParkinoxApiService();
+///   PlateDetectionResult? _result;
+///   bool _isLoading = false;
+///   String? _error;
+///
+///   Future<void> _pickAndDetectImage() async {
+///     setState(() {
+///       _isLoading = true;
+///       _error = null;
+///     });
+///
+///     try {
+///       // Use image_picker package
+///       final ImagePicker picker = ImagePicker();
+///       final XFile? image = await picker.pickImage(source: ImageSource.camera);
+///
+///       if (image == null) {
+///         setState(() => _isLoading = false);
+///         return;
+///       }
+///
+///       // Detect plate
+///       final result = await _apiService.detectPlate(File(image.path));
+///
+///       setState(() {
+///         _result = result;
+///         _isLoading = false;
+///       });
+///
+///       if (result.success) {
+///         print('Detected plate: ${result.plate}');
+///       } else {
+///         print('No plate detected');
+///       }
+///     } catch (e) {
+///       setState(() {
+///         _error = e.toString();
+///         _isLoading = false;
+///       });
+///     }
+///   }
+///
+///   @override
+///   Widget build(BuildContext context) {
+///     return Scaffold(
+///       appBar: AppBar(title: Text('Plate Detection')),
+///       body: Center(
+///         child: Column(
+///           mainAxisAlignment: MainAxisAlignment.center,
+///           children: [
+///             if (_isLoading)
+///               CircularProgressIndicator()
+///             else if (_error != null)
+///               Text('Error: $_error', style: TextStyle(color: Colors.red))
+///             else if (_result != null)
+///               Column(
+///                 children: [
+///                   Text(
+///                     _result!.success
+///                       ? 'Plate: ${_result!.plate}'
+///                       : 'No plate detected',
+///                     style: TextStyle(fontSize: 24),
+///                   ),
+///                   if (_result!.success) ...[
+///                     SizedBox(height: 10),
+///                     Text('Confidence: ${(_result!.confidence * 100).toStringAsFixed(1)}%'),
+///                     Text('Characters: ${_result!.numCharacters}'),
+///                   ],
+///                 ],
+///               ),
+///             SizedBox(height: 20),
+///             ElevatedButton(
+///               onPressed: _pickAndDetectImage,
+///               child: Text('Capture & Detect'),
+///             ),
+///           ],
+///         ),
+///       ),
+///     );
+///   }
+/// }
+/// ```
+
+/// Required dependencies in pubspec.yaml:
+///
+/// ```yaml
+/// dependencies:
+///   flutter:
+///     sdk: flutter
+///   http: ^1.1.0
+///   image_picker: ^1.0.4
+/// ```
+
+void main() async {
+  // Example: Health check
+  print('=== Parkinox API Integration Example ===\n');
+
+  final apiService = ParkinoxApiService();
+
+  try {
+    print('Checking API health...');
+    final health = await apiService.healthCheck();
+    print('✓ API Status: ${health.status}');
+    print('✓ Models Loaded: ${health.modelsLoaded}');
+    print('✓ Device: ${health.device}');
+    print('✓ Version: ${health.version}\n');
+
+    if (!health.isHealthy) {
+      print('⚠ API is not healthy!');
+      return;
+    }
+
+    // Example: Detect from file
+    // Uncomment and provide a valid image path to test
+    /*
+    print('Detecting plate from image...');
+    final result = await apiService.detectPlate(File('path/to/image.jpg'));
+    print('Result: $result\n');
+    
+    if (result.success) {
+      print('✓ Plate detected: ${result.plate}');
+      print('  Confidence: ${(result.confidence * 100).toStringAsFixed(1)}%');
+      print('  Char Confidence: ${(result.charConfidence * 100).toStringAsFixed(1)}%');
+      print('  Characters: ${result.numCharacters}');
+      print('  Bounding Box: ${result.bbox}');
+    } else {
+      print('⚠ No plate detected');
+      print('  Message: ${result.message}');
+    }
+    */
+  } catch (e) {
+    print('❌ Error: $e');
+  }
+}

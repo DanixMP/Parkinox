@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پارکینوکس — پنل دانشجو</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080c0a;
+  --card: #121a16;
+  --surface: #1a2420;
+  --surface-hover: #243029;
+  --border: #2a3d34;
+  --border-focus: #34d399;
+  --text: #ecfdf5;
+  --muted: #86a89a;
+  --dim: #5c7a6e;
+  --green: #22c55e;
+  --green-dim: rgba(34,197,94,.14);
+  --green-glow: rgba(34,197,94,.35);
+  --orange: #f59e0b;
+  --red: #ef4444;
+  --blue: #38bdf8;
+  --radius: 14px;
+  --radius-sm: 8px;
+  --font: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { font-size: 15px; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  background-image:
+    radial-gradient(ellipse 70% 45% at 50% -15%, rgba(34,197,94,.1), transparent),
+    radial-gradient(ellipse 50% 35% at 0% 100%, rgba(56,189,248,.05), transparent);
+}
+
+.header {
+  position: sticky; top: 0; z-index: 40;
+  background: rgba(8,12,10,.88);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-logo {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: linear-gradient(135deg, #059669, #22c55e);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 12px; color: #fff;
+}
+.brand h1 { font-size: 16px; font-weight: 700; }
+.brand span { display: block; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+.api-pill {
+  font-size: 11px; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 6px 10px; border-radius: 20px;
+  max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.api-pill.online { color: var(--green); border-color: rgba(34,197,94,.3); }
+
+.wrap { max-width: 440px; margin: 0 auto; padding: 24px 16px 48px; }
+
+.steps {
+  display: flex; gap: 6px; margin-bottom: 24px;
+}
+.step-dot {
+  flex: 1; height: 4px; border-radius: 2px;
+  background: var(--surface); transition: background .25s;
+}
+.step-dot.done { background: var(--green); }
+.step-dot.active { background: var(--green); box-shadow: 0 0 10px var(--green-glow); }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.35);
+}
+.card h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+.card .sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.6; }
+
+.field { margin-bottom: 16px; }
+.field label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--muted); margin-bottom: 6px;
+}
+.field input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  font-family: inherit; font-size: 15px;
+  direction: ltr; text-align: left;
+}
+.field input:focus {
+  outline: none; border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(52,211,153,.15);
+}
+.field .hint { font-size: 11px; color: var(--dim); margin-top: 6px; direction: rtl; text-align: right; }
+
+.btn {
+  width: 100%;
+  border: none; border-radius: var(--radius-sm);
+  padding: 13px 16px;
+  font-family: inherit; font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: all .15s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--green); color: #052e16; }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
+.btn-ghost {
+  background: transparent; color: var(--muted);
+  border: 1px solid var(--border); margin-top: 10px;
+}
+.btn-ghost:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+.btn-wallet {
+  background: linear-gradient(135deg, #059669, #22c55e);
+  color: #fff; font-size: 16px; padding: 16px;
+  margin-top: 8px;
+}
+.btn-wallet:hover:not(:disabled) { filter: brightness(1.08); }
+
+.otp-banner {
+  background: var(--green-dim);
+  border: 1px dashed rgba(34,197,94,.4);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--green);
+  display: none;
+}
+.otp-banner.show { display: block; }
+.otp-banner code {
+  font-size: 22px; font-weight: 800; letter-spacing: 4px;
+  display: block; margin-top: 6px; direction: ltr; text-align: center;
+}
+
+.alert {
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  font-size: 13px; margin-bottom: 14px; display: none;
+}
+.alert.show { display: block; }
+.alert-error { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.3); color: #fca5a5; }
+.alert-success { background: var(--green-dim); border: 1px solid rgba(34,197,94,.3); color: #86efac; }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+.wallet-hero {
+  text-align: center;
+  padding: 20px 0 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.wallet-hero .label { font-size: 12px; color: var(--muted); }
+.wallet-hero .balance {
+  font-size: 36px; font-weight: 800; color: var(--green);
+  margin: 8px 0; direction: ltr;
+}
+.wallet-hero .balance small { font-size: 14px; font-weight: 500; color: var(--muted); }
+
+.profile-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.profile-row:last-child { border-bottom: none; }
+.profile-row .k { color: var(--muted); }
+.profile-row .v { font-weight: 600; direction: ltr; }
+
+.log {
+  margin-top: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  max-height: 140px; overflow-y: auto;
+  padding: 10px;
+  font-size: 11px; color: var(--dim);
+  font-family: ui-monospace, monospace;
+  direction: ltr; text-align: left;
+}
+.log div { margin-bottom: 4px; }
+.log .ok { color: var(--green); }
+.log .err { color: var(--red); }
+
+.settings-toggle {
+  margin-top: 16px; text-align: center;
+}
+.settings-toggle button {
+  background: none; border: none; color: var(--dim);
+  font-size: 12px; cursor: pointer; font-family: inherit;
+}
+.settings-box {
+  display: none; margin-top: 12px;
+  padding-top: 12px; border-top: 1px solid var(--border);
+}
+.settings-box.show { display: block; }
+
+/* ── Segmented plate entry ── */
+.plate-entry-wrap { margin-bottom: 16px; }
+.plate-entry-wrap > label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--muted); margin-bottom: 10px;
+}
+.plate-input-ir {
+  display: flex; align-items: stretch; direction: ltr;
+  background: #fff; color: #111; border: 3px solid #111;
+  border-radius: 8px; overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0,0,0,.4);
+  max-width: 100%;
+}
+.plate-input-ir .plate-strip {
+  background: #003399; color: #fff;
+  padding: 8px 6px; min-width: 34px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 700; line-height: 1.15; flex-shrink: 0;
+}
+.plate-input-ir .plate-strip .flag {
+  display: flex; flex-direction: column; width: 22px; height: 12px;
+  margin-bottom: 4px; border: 1px solid rgba(255,255,255,.35);
+}
+.plate-input-ir .plate-strip .flag span { flex: 1; }
+.plate-input-ir .plate-strip .flag .g { background: #239F40; }
+.plate-input-ir .plate-strip .flag .w { background: #fff; }
+.plate-input-ir .plate-strip .flag .r { background: #DA0000; }
+.plate-input-cells {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  gap: 3px; padding: 8px 6px; flex-wrap: nowrap; min-width: 0;
+}
+.plate-cell {
+  width: 28px; height: 38px;
+  border: 2px solid #ccc; border-radius: 4px;
+  background: #f8f8f8; color: #111;
+  font-family: inherit; font-size: 20px; font-weight: 800;
+  text-align: center; padding: 0;
+  transition: border-color .15s, box-shadow .15s;
+}
+.plate-cell:focus {
+  outline: none; border-color: #059669;
+  box-shadow: 0 0 0 2px rgba(5,150,105,.35);
+  background: #fff;
+}
+.plate-cell.filled { border-color: #059669; background: #fff; }
+.plate-cell.plate-letter {
+  width: 36px; font-size: 22px; cursor: pointer;
+  background: #e8f5ee; border-color: #059669;
+  color: #065f46;
+}
+.plate-cell.plate-letter.empty {
+  color: #999; background: #f0f0f0; border-color: #ccc;
+  font-size: 14px;
+}
+.plate-sep {
+  color: #666; font-size: 22px; font-weight: 400;
+  padding: 0 2px; user-select: none; flex-shrink: 0;
+}
+.plate-gap { width: 4px; flex-shrink: 0; }
+.plate-preview {
+  margin-top: 10px; text-align: center;
+  font-size: 13px; color: var(--muted); direction: ltr;
+}
+.plate-preview strong { color: var(--green); font-size: 15px; letter-spacing: 1px; }
+
+.letter-picker-overlay {
+  display: none; position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,.55); align-items: flex-end; justify-content: center;
+  padding: 16px;
+}
+.letter-picker-overlay.show { display: flex; }
+.letter-picker-sheet {
+  width: 100%; max-width: 400px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 16px; max-height: 70vh; overflow-y: auto;
+}
+.letter-picker-sheet h3 {
+  font-size: 14px; margin-bottom: 4px;
+}
+.letter-picker-sheet p {
+  font-size: 11px; color: var(--muted); margin-bottom: 12px;
+}
+.letter-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px;
+}
+.letter-grid button {
+  aspect-ratio: 1; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text);
+  border-radius: var(--radius-sm); font-family: inherit;
+  font-size: 20px; font-weight: 700; cursor: pointer;
+  transition: all .12s;
+}
+.letter-grid button:hover { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+.letter-grid button.selected {
+  background: var(--green); color: #052e16; border-color: var(--green);
+}
+.letter-picker-close {
+  width: 100%; margin-top: 12px;
+  padding: 10px; border: 1px solid var(--border);
+  background: transparent; color: var(--muted);
+  border-radius: var(--radius-sm); font-family: inherit;
+  font-size: 13px; cursor: pointer;
+}
+.letter-picker-close:hover { background: var(--surface-hover); color: var(--text); }
+
+@media (max-width: 400px) {
+  .plate-cell { width: 24px; height: 34px; font-size: 17px; }
+  .plate-cell.plate-letter { width: 30px; font-size: 18px; }
+  .plate-input-cells { gap: 2px; padding: 6px 4px; }
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="brand">
+    <div class="brand-logo">PX</div>
+    <div>
+      <h1>پارکینوکس</h1>
+      <span>پنل دانشجو — تست</span>
+    </div>
+  </div>
+  <div class="api-pill" id="apiStatus" title="وضعیت API">در حال بررسی…</div>
+</header>
+
+<main class="wrap">
+  <div class="steps" id="stepBar">
+    <div class="step-dot active" data-step="1"></div>
+    <div class="step-dot" data-step="2"></div>
+    <div class="step-dot" data-step="3"></div>
+    <div class="step-dot" data-step="4"></div>
+  </div>
+
+  <div id="alertBox" class="alert"></div>
+
+  <!-- Step 1: Phone -->
+  <section class="panel active" id="panelPhone">
+    <div class="card">
+      <h2>ورود با موبایل</h2>
+      <p class="sub">شماره موبایل خود را وارد کنید. کد تأیید از سرور دریافت می‌شود (در حالت توسعه، کد در پاسخ API نمایش داده می‌شود).</p>
+      <div class="field">
+        <label>شماره موبایل</label>
+        <input type="tel" id="phoneInput" placeholder="09123456789" autocomplete="tel">
+      </div>
+      <button type="button" class="btn btn-primary" id="btnSendOtp">ارسال کد تأیید</button>
+    </div>
+  </section>
+
+  <!-- Step 2: OTP -->
+  <section class="panel" id="panelOtp">
+    <div class="card">
+      <h2>کد تأیید</h2>
+      <p class="sub">کد ۶ رقمی ارسال‌شده را وارد کنید.</p>
+      <div class="otp-banner" id="otpBanner">
+        <span>کد توسعه (از API):</span>
+        <code id="debugOtpCode">------</code>
+      </div>
+      <div class="field">
+        <label>کد OTP</label>
+        <input type="text" id="otpInput" placeholder="123456" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+      </div>
+      <button type="button" class="btn btn-primary" id="btnVerifyOtp">تأیید و ادامه</button>
+      <button type="button" class="btn btn-ghost" id="btnBackPhone">تغییر شماره</button>
+    </div>
+  </section>
+
+  <!-- Step 3: Register -->
+  <section class="panel" id="panelRegister">
+    <div class="card">
+      <h2>ثبت‌نام</h2>
+      <p class="sub">نام و پلاک خود را وارد کنید تا در سیستم پارکینگ ثبت شوید.</p>
+      <div class="field">
+        <label>نام و نام خانوادگی</label>
+        <input type="text" id="fullNameInput" placeholder="علی رضایی" autocomplete="name" style="direction:rtl;text-align:right">
+      </div>
+      <div class="plate-entry-wrap">
+        <label>شماره پلاک</label>
+        <div class="plate-input-ir" id="plateInputIr">
+          <div class="plate-strip">
+            <div class="flag"><span class="g"></span><span class="w"></span><span class="r"></span></div>
+            IR<br>I.R.
+          </div>
+          <div class="plate-input-cells">
+            <input type="text" class="plate-cell plate-digit" id="plateD1" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۱">
+            <input type="text" class="plate-cell plate-digit" id="plateD2" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۲">
+            <button type="button" class="plate-cell plate-letter empty" id="plateLetterBtn" aria-label="حرف پلاک">حرف</button>
+            <span class="plate-gap"></span>
+            <input type="text" class="plate-cell plate-digit" id="plateD3" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۳">
+            <input type="text" class="plate-cell plate-digit" id="plateD4" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۴">
+            <input type="text" class="plate-cell plate-digit" id="plateD5" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۵">
+            <span class="plate-sep">-</span>
+            <input type="text" class="plate-cell plate-digit" id="plateD6" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۶">
+            <input type="text" class="plate-cell plate-digit" id="plateD7" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۷">
+          </div>
+        </div>
+        <p class="plate-preview">پیش‌نمایش: <strong id="platePreview">—</strong></p>
+        <p class="hint" style="margin-top:6px">روی «حرف» بزنید و از لیست انتخاب کنید؛ اعداد را در خانه‌ها وارد کنید.</p>
+      </div>
+      <div class="field">
+        <label>شماره دانشجویی (اختیاری)</label>
+        <input type="text" id="studentIdInput" placeholder="401234567" style="direction:ltr">
+      </div>
+      <button type="button" class="btn btn-primary" id="btnRegister">ثبت‌نام</button>
+    </div>
+  </section>
+
+  <!-- Step 4: Dashboard -->
+  <section class="panel" id="panelDashboard">
+    <div class="card">
+      <h2>کیف پول من</h2>
+      <p class="sub">موجودی و اطلاعات حساب شما</p>
+
+      <div class="wallet-hero">
+        <div class="label">موجودی کیف پول</div>
+        <div class="balance" id="walletBalance">— <small>تومان</small></div>
+      </div>
+
+      <button type="button" class="btn btn-wallet" id="btnCharge">شارژ کیف پول (+۱۰۰٬۰۰۰ تومان)</button>
+
+      <div style="margin-top:20px">
+        <div class="profile-row"><span class="k">نام</span><span class="v" id="profName">—</span></div>
+        <div class="profile-row"><span class="k">موبایل</span><span class="v" id="profPhone">—</span></div>
+        <div class="profile-row"><span class="k">پلاک</span><span class="v" id="profPlate">—</span></div>
+      </div>
+
+      <button type="button" class="btn btn-ghost" id="btnLogout" style="margin-top:16px">خروج</button>
+    </div>
+  </section>
+
+  <div class="settings-toggle">
+    <button type="button" id="btnToggleSettings">تنظیمات API</button>
+  </div>
+  <div class="settings-box" id="settingsBox">
+    <div class="field">
+      <label>آدرس API (Django)</label>
+      <input type="url" id="apiBaseInput" value="http://localhost:8001/api">
+    </div>
+    <button type="button" class="btn btn-ghost" id="btnSaveSettings">ذخیره</button>
+  </div>
+
+  <div class="log" id="logBox"></div>
+</main>
+
+<div class="letter-picker-overlay" id="letterPickerOverlay" aria-hidden="true">
+  <div class="letter-picker-sheet">
+    <h3>انتخاب حرف پلاک</h3>
+    <p>حرف را از لیست انتخاب کنید</p>
+    <div class="letter-grid" id="letterGrid"></div>
+    <button type="button" class="letter-picker-close" id="letterPickerClose">بستن</button>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'parkinox_student_panel';
+const STEPS = { phone: 1, otp: 2, register: 3, dashboard: 4 };
+
+const PLATE_LETTERS = [
+  'ب', 'ج', 'د', 'س', 'ص', 'ط', 'ق', 'ل', 'م', 'ن', 'و', 'ه', 'ی',
+  'ع', 'پ', 'ت', 'ث', 'ف', 'ک', 'گ', 'ژ', 'ش', 'ز', 'ر', 'ح', 'خ',
+];
+const PERSIAN_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+const PLATE_DIGIT_IDS = ['plateD1','plateD2','plateD3','plateD4','plateD5','plateD6','plateD7'];
+let selectedPlateLetter = '';
+
+function toPersianDigit(ch) {
+  if (!ch) return '';
+  if (ch >= '0' && ch <= '9') return PERSIAN_DIGITS[ch.charCodeAt(0) - 48];
+  if (PERSIAN_DIGITS.includes(ch)) return ch;
+  const arabic = '٠١٢٣٤٥٦٧٨٩';
+  const idx = arabic.indexOf(ch);
+  if (idx >= 0) return PERSIAN_DIGITS[idx];
+  return '';
+}
+
+function getPlateDigit(id) {
+  const el = document.getElementById(id);
+  return toPersianDigit((el?.value || '').slice(-1));
+}
+
+function buildPlateString() {
+  const d = PLATE_DIGIT_IDS.map(getPlateDigit);
+  if (!selectedPlateLetter || d.some(x => !x)) return '';
+  return `${d[0]}${d[1]}${selectedPlateLetter}${d[2]}${d[3]}${d[4]}-${d[5]}${d[6]}`;
+}
+
+function updatePlatePreview() {
+  const plate = buildPlateString();
+  const preview = document.getElementById('platePreview');
+  preview.textContent = plate || '—';
+  preview.style.color = plate ? 'var(--green)' : '';
+  return plate;
+}
+
+function setPlateLetter(letter) {
+  selectedPlateLetter = letter;
+  const btn = document.getElementById('plateLetterBtn');
+  btn.textContent = letter;
+  btn.dataset.value = letter;
+  btn.classList.remove('empty');
+  document.querySelectorAll('#letterGrid button').forEach(b => {
+    b.classList.toggle('selected', b.dataset.letter === letter);
+  });
+  updatePlatePreview();
+  closeLetterPicker();
+  document.getElementById('plateD3')?.focus();
+}
+
+function openLetterPicker() {
+  document.querySelectorAll('#letterGrid button').forEach(b => {
+    b.classList.toggle('selected', b.dataset.letter === selectedPlateLetter);
+  });
+  document.getElementById('letterPickerOverlay').classList.add('show');
+  document.getElementById('letterPickerOverlay').setAttribute('aria-hidden', 'false');
+}
+
+function closeLetterPicker() {
+  document.getElementById('letterPickerOverlay').classList.remove('show');
+  document.getElementById('letterPickerOverlay').setAttribute('aria-hidden', 'true');
+}
+
+function initLetterGrid() {
+  const grid = document.getElementById('letterGrid');
+  grid.innerHTML = '';
+  PLATE_LETTERS.forEach(letter => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = letter;
+    b.dataset.letter = letter;
+    b.addEventListener('click', () => setPlateLetter(letter));
+    grid.appendChild(b);
+  });
+}
+
+function focusNextPlateDigit(currentId) {
+  if (currentId === 'plateD2') {
+    document.getElementById('plateLetterBtn')?.focus();
+    return;
+  }
+  const idx = PLATE_DIGIT_IDS.indexOf(currentId);
+  if (idx < 0 || idx >= PLATE_DIGIT_IDS.length - 1) return;
+  document.getElementById(PLATE_DIGIT_IDS[idx + 1])?.focus();
+}
+
+function focusPrevPlateDigit(currentId) {
+  if (currentId === 'plateD3') {
+    document.getElementById('plateLetterBtn')?.focus();
+    return;
+  }
+  const idx = PLATE_DIGIT_IDS.indexOf(currentId);
+  if (idx <= 0) return;
+  document.getElementById(PLATE_DIGIT_IDS[idx - 1])?.focus();
+}
+
+function handlePlateDigitInput(e) {
+  const el = e.target;
+  const digit = toPersianDigit(el.value.slice(-1));
+  el.value = digit;
+  el.classList.toggle('filled', !!digit);
+  updatePlatePreview();
+  if (digit) focusNextPlateDigit(el.id);
+}
+
+function handlePlateDigitKeydown(e) {
+  const el = e.target;
+  if (e.key === 'Backspace' && !el.value) {
+    e.preventDefault();
+    focusPrevPlateDigit(el.id);
+    return;
+  }
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    focusPrevPlateDigit(el.id);
+  }
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    focusNextPlateDigit(el.id);
+  }
+}
+
+function handlePlatePaste(e) {
+  const text = (e.clipboardData || window.clipboardData).getData('text').trim();
+  if (!text) return;
+  e.preventDefault();
+  fillPlateFromString(text);
+}
+
+function fillPlateFromString(raw) {
+  const cleaned = raw.replace(/\s+/g, '').replace(/IR/gi, '');
+  const m = cleaned.match(/^([0-9۰-۹٠-٩]{2})([^\d-]+)([0-9۰-۹٠-٩]{3})-?([0-9۰-۹٠-٩]{2})$/u);
+  if (!m) return false;
+  const letter = m[2];
+  if (!PLATE_LETTERS.includes(letter)) return false;
+  const toChars = s => [...s].map(toPersianDigit).filter(Boolean);
+  const d1 = toChars(m[1]);
+  const d2 = toChars(m[3]);
+  const d3 = toChars(m[4]);
+  if (d1.length !== 2 || d2.length !== 3 || d3.length !== 2) return false;
+  document.getElementById('plateD1').value = d1[0];
+  document.getElementById('plateD2').value = d1[1];
+  setPlateLetter(m[2]);
+  document.getElementById('plateD3').value = d2[0];
+  document.getElementById('plateD4').value = d2[1];
+  document.getElementById('plateD5').value = d2[2];
+  document.getElementById('plateD6').value = d3[0];
+  document.getElementById('plateD7').value = d3[1];
+  PLATE_DIGIT_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.toggle('filled', !!el.value);
+  });
+  updatePlatePreview();
+  return true;
+}
+
+function resetPlateInput() {
+  selectedPlateLetter = '';
+  PLATE_DIGIT_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    el.value = '';
+    el.classList.remove('filled');
+  });
+  const btn = document.getElementById('plateLetterBtn');
+  btn.textContent = 'حرف';
+  btn.dataset.value = '';
+  btn.classList.add('empty');
+  document.querySelectorAll('#letterGrid button').forEach(b => b.classList.remove('selected'));
+  updatePlatePreview();
+}
+
+function initPlateInput() {
+  initLetterGrid();
+  const letterBtn = document.getElementById('plateLetterBtn');
+  letterBtn.addEventListener('click', openLetterPicker);
+  letterBtn.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openLetterPicker();
+    }
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      document.getElementById('plateD2')?.focus();
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (selectedPlateLetter) document.getElementById('plateD3')?.focus();
+    }
+  });
+  document.getElementById('letterPickerClose').addEventListener('click', closeLetterPicker);
+  document.getElementById('letterPickerOverlay').addEventListener('click', e => {
+    if (e.target.id === 'letterPickerOverlay') closeLetterPicker();
+  });
+  PLATE_DIGIT_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', handlePlateDigitInput);
+    el.addEventListener('keydown', handlePlateDigitKeydown);
+    el.addEventListener('paste', handlePlatePaste);
+    el.addEventListener('focus', () => el.select());
+  });
+  document.getElementById('plateInputIr').addEventListener('paste', handlePlatePaste);
+}
+
+let state = {
+  phone: '',
+  verificationToken: null,
+  access: null,
+  refresh: null,
+  user: null,
+};
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    state = { ...state, ...saved };
+  } catch (_) {}
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    phone: state.phone,
+    verificationToken: state.verificationToken,
+    access: state.access,
+    refresh: state.refresh,
+    user: state.user,
+  }));
+}
+
+function clearState() {
+  state = { phone: '', verificationToken: null, access: null, refresh: null, user: null };
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+function apiBase() {
+  return (localStorage.getItem('parkinox_api_base') || document.getElementById('apiBaseInput').value).replace(/\/$/, '');
+}
+
+function setApiBase(url) {
+  localStorage.setItem('parkinox_api_base', url.replace(/\/$/, ''));
+  document.getElementById('apiBaseInput').value = url;
+}
+
+function log(msg, type = '') {
+  const box = document.getElementById('logBox');
+  const line = document.createElement('div');
+  line.className = type;
+  line.textContent = `[${new Date().toLocaleTimeString('fa-IR')}] ${msg}`;
+  box.prepend(line);
+  while (box.children.length > 30) box.lastChild.remove();
+}
+
+function showAlert(text, isError = true) {
+  const el = document.getElementById('alertBox');
+  el.textContent = text;
+  el.className = 'alert show ' + (isError ? 'alert-error' : 'alert-success');
+  setTimeout(() => el.classList.remove('show'), 5000);
+}
+
+function hideAlert() {
+  document.getElementById('alertBox').classList.remove('show');
+}
+
+function setStep(n) {
+  document.querySelectorAll('.step-dot').forEach(dot => {
+    const s = parseInt(dot.dataset.step, 10);
+    dot.classList.toggle('done', s < n);
+    dot.classList.toggle('active', s === n);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const map = { 1: 'panelPhone', 2: 'panelOtp', 3: 'panelRegister', 4: 'panelDashboard' };
+  document.getElementById(map[n])?.classList.add('active');
+}
+
+function formatMoney(n) {
+  if (n == null || n === '') return '—';
+  return Number(n).toLocaleString('fa-IR');
+}
+
+async function api(path, options = {}) {
+  const url = apiBase() + path;
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (state.access && !options.skipAuth) {
+    headers['Authorization'] = 'Bearer ' + state.access;
+  }
+  const res = await fetch(url, { ...options, headers });
+  let data = {};
+  try { data = await res.json(); } catch (_) {}
+  if (!res.ok) {
+    const err = data.error || data.detail || JSON.stringify(data) || res.statusText;
+    throw new Error(typeof err === 'string' ? err : 'خطای سرور');
+  }
+  return data;
+}
+
+function renderDashboard(user) {
+  state.user = user;
+  document.getElementById('walletBalance').innerHTML =
+    `${formatMoney(user.wallet_balance)} <small>تومان</small>`;
+  document.getElementById('profName').textContent = user.full_name || '—';
+  document.getElementById('profPhone').textContent = user.phone || state.phone;
+  const plate = (user.plates && user.plates.find(p => p.is_primary)) || (user.plates && user.plates[0]);
+  document.getElementById('profPlate').textContent = plate ? plate.plate_number : '—';
+  saveState();
+  setStep(STEPS.dashboard);
+}
+
+async function refreshProfile() {
+  const user = await api('/auth/student/me/');
+  renderDashboard(user);
+  return user;
+}
+
+async function checkApiHealth() {
+  const pill = document.getElementById('apiStatus');
+  try {
+    const res = await fetch(apiBase().replace(/\/api$/, '') + '/api/parking/rates/', { method: 'GET' });
+    if (res.ok) {
+      pill.textContent = 'API آنلاین';
+      pill.classList.add('online');
+    } else {
+      pill.textContent = 'API خطا';
+      pill.classList.remove('online');
+    }
+  } catch (_) {
+    pill.textContent = 'API آفلاین';
+    pill.classList.remove('online');
+  }
+}
+
+document.getElementById('btnSendOtp').addEventListener('click', async () => {
+  hideAlert();
+  const phone = document.getElementById('phoneInput').value.trim();
+  if (!phone) return showAlert('شماره موبایل را وارد کنید');
+  const btn = document.getElementById('btnSendOtp');
+  btn.disabled = true;
+  try {
+    const data = await api('/auth/student/otp/send/', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+      skipAuth: true,
+    });
+    state.phone = data.phone || phone;
+    saveState();
+    log('OTP sent to ' + state.phone, 'ok');
+    if (data.debug_otp) {
+      document.getElementById('debugOtpCode').textContent = data.debug_otp;
+      document.getElementById('otpBanner').classList.add('show');
+    } else {
+      document.getElementById('otpBanner').classList.remove('show');
+    }
+    document.getElementById('phoneInput').value = state.phone;
+    setStep(STEPS.otp);
+    showAlert('کد ارسال شد', false);
+  } catch (e) {
+    showAlert(e.message);
+    log(e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('btnVerifyOtp').addEventListener('click', async () => {
+  hideAlert();
+  const code = document.getElementById('otpInput').value.trim();
+  if (!code) return showAlert('کد را وارد کنید');
+  const btn = document.getElementById('btnVerifyOtp');
+  btn.disabled = true;
+  try {
+    const data = await api('/auth/student/otp/verify/', {
+      method: 'POST',
+      body: JSON.stringify({ phone: state.phone, code }),
+      skipAuth: true,
+    });
+    log('OTP verified', 'ok');
+    if (data.is_existing_user) {
+      state.access = data.access;
+      state.refresh = data.refresh;
+      saveState();
+      renderDashboard(data.user);
+      showAlert('خوش آمدید!', false);
+    } else {
+      state.verificationToken = data.verification_token;
+      saveState();
+      setStep(STEPS.register);
+      setTimeout(() => document.getElementById('plateD1')?.focus(), 100);
+      showAlert('لطفاً اطلاعات خود را تکمیل کنید', false);
+    }
+  } catch (e) {
+    showAlert(e.message);
+    log(e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('btnRegister').addEventListener('click', async () => {
+  hideAlert();
+  const full_name = document.getElementById('fullNameInput').value.trim();
+  const plate_number = buildPlateString();
+  const student_id = document.getElementById('studentIdInput').value.trim();
+  if (!full_name || !plate_number) return showAlert('نام و تمام خانه‌های پلاک را پر کنید');
+  const btn = document.getElementById('btnRegister');
+  btn.disabled = true;
+  try {
+    const body = {
+      verification_token: state.verificationToken,
+      full_name,
+      plate_number,
+    };
+    if (student_id) body.student_id = student_id;
+    const data = await api('/auth/student/register/', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      skipAuth: true,
+    });
+    state.access = data.access;
+    state.refresh = data.refresh;
+    state.verificationToken = null;
+    saveState();
+    renderDashboard(data.user);
+    showAlert('ثبت‌نام موفق!', false);
+    log('Registered', 'ok');
+  } catch (e) {
+    showAlert(e.message);
+    log(e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('btnCharge').addEventListener('click', async () => {
+  hideAlert();
+  const btn = document.getElementById('btnCharge');
+  btn.disabled = true;
+  try {
+    const data = await api('/wallets/student/demo-topup/', { method: 'POST', body: '{}' });
+    log('Top-up +' + data.amount_added, 'ok');
+    await refreshProfile();
+    showAlert(data.message || 'شارژ انجام شد', false);
+  } catch (e) {
+    showAlert(e.message);
+    log(e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('btnBackPhone').addEventListener('click', () => {
+  setStep(STEPS.phone);
+  hideAlert();
+});
+
+document.getElementById('btnLogout').addEventListener('click', () => {
+  clearState();
+  document.getElementById('otpInput').value = '';
+  document.getElementById('otpBanner').classList.remove('show');
+  resetPlateInput();
+  setStep(STEPS.phone);
+  hideAlert();
+  log('Logged out', 'ok');
+});
+
+document.getElementById('btnToggleSettings').addEventListener('click', () => {
+  document.getElementById('settingsBox').classList.toggle('show');
+});
+
+document.getElementById('btnSaveSettings').addEventListener('click', () => {
+  setApiBase(document.getElementById('apiBaseInput').value);
+  checkApiHealth();
+  showAlert('تنظیمات ذخیره شد', false);
+});
+
+loadState();
+if (localStorage.getItem('parkinox_api_base')) {
+  document.getElementById('apiBaseInput').value = localStorage.getItem('parkinox_api_base');
+}
+if (state.phone) document.getElementById('phoneInput').value = state.phone;
+
+initPlateInput();
+
+(async function init() {
+  await checkApiHealth();
+  if (state.access) {
+    try {
+      await refreshProfile();
+    } catch (_) {
+      clearState();
+      setStep(STEPS.phone);
+    }
+  } else {
+    setStep(STEPS.phone);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+name: parkinox_op
+description: University Parking Operator Dashboard
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.10.4 <4.0.0'
+  flutter: '>=3.38.5'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # === STATE MANAGEMENT ===
+  flutter_riverpod: ^2.6.1 # State (operators, WS events, sessions)
+  riverpod_annotation: ^2.6.1
+
+  # === NETWORKING ===
+  web_socket_channel: ^3.0.1   # WebSocket to FastAPI
+  dio: ^5.7.0                   # HTTP to Django REST API
+  http: ^1.1.0                  # Additional HTTP support
+
+  # === STORAGE ===
+  shared_preferences: ^2.3.3   # Saved operator profiles (one-click login)
+  flutter_secure_storage: ^9.2.2 # JWT token storage
+  sqflite: ^2.4.1              # SQLite database for local plate records
+  sqflite_common_ffi: ^2.3.3   # SQLite FFI for desktop platforms (Windows, Linux, macOS)
+  path_provider: ^2.1.5        # Get app directories for database
+
+  # === CAMERA ===
+  camera: ^0.11.0+2            # Camera access for plate capture
+  camera_windows: ^0.2.3       # Windows camera support
+  image_picker: ^1.1.2         # Image selection from gallery
+
+  # === UI PACKAGES ===
+  pinput: ^5.0.0                # PIN input for operator login (compatible version)
+  google_fonts: ^6.2.1          # Inter for Latin text
+  flutter_svg: ^2.0.10          # SVG support for Iranian plate assets
+
+  # === UTILITIES ===
+  intl: ^0.20.2                 # DateTime + Persian number formatting
+  shamsi_date: ^1.0.1           # Shamsi/Jalali (Persian) calendar
+  uuid: ^4.5.1                  # Event IDs
+  logger: ^2.4.0                # Structured logging
+  go_router: ^14.6.2            # Navigation
+  crypto: ^3.0.3                # PIN hashing
+  path: ^1.9.0                  # Path manipulation
+  http_parser: ^4.1.1           # HTTP content type parsing
+  connectivity_plus: ^6.0.5     # Network connectivity check
+  json_annotation: ^4.9.0       # JSON serialization annotations
+  
+  # === ICONS ===
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  riverpod_generator: ^2.6.1
+  build_runner: ^2.4.13
+  json_serializable: ^6.8.0     # JSON code generation
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/images/logo/
+    - assets/images/plates/
+    - assets/fonts/
+  
+  fonts:
+    - family: Vazirmatn
+      fonts:
+        - asset: assets/fonts/Vazirmatn-Regular.ttf
+        - asset: assets/fonts/Vazirmatn-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Vazirmatn-Medium.ttf
+          weight: 500
