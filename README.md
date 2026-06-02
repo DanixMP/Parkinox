@@ -168,7 +168,7 @@ flutter test
 
 ## License
 
-[Add your license information here]
+[UNIVERSITY PROJECT ONLY.]
 
 ## Support
 
@@ -176,7 +176,7 @@ For issues and questions, please open an issue on GitHub.
 
 ## Authors
 
-- [Your Name/Team]
+- [MP.]
 
 ## Changelog
 
