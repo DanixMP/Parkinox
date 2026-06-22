@@ -98,6 +98,48 @@ The server will start at: `http://localhost:8000`
 }
 ```
 
+### 6. Camera configuration
+- **POST** `/cameras/config`
+- Push entry/exit IP camera RTSP URLs from Flutter settings
+- Body:
+```json
+{
+  "entry_enabled": true,
+  "exit_enabled": false,
+  "entry_url": "rtsp://user:pass@192.168.1.64:554/Streaming/Channels/101",
+  "exit_url": null
+}
+```
+
+### 7. Camera status
+- **GET** `/cameras/status`
+- Returns connection state for entry and exit streams
+
+### 8. MJPEG preview
+- **GET** `/cameras/entry/mjpeg`
+- **GET** `/cameras/exit/mjpeg`
+- Multipart MJPEG stream for operator dashboard preview
+
+### 9. WebSocket — real-time detection
+- **WS** `/ws`
+- Server pushes `plate_detected` events when IP camera streams detect plates
+- Client can send `{"type": "ping"}` → receives `{"type": "pong"}`
+- Optional `{"type": "camera_config", "data": {...}}` to update cameras
+
+Example `plate_detected` message:
+```json
+{
+  "type": "plate_detected",
+  "data": {
+    "event_id": "uuid",
+    "plate_number": "12 ب 345 17",
+    "camera_id": "entry_camera",
+    "confidence": 0.87,
+    "timestamp": "2026-06-22T10:30:00+00:00"
+  }
+}
+```
+
 ## Testing
 
 Run the test suite:
@@ -219,11 +261,12 @@ detector = PlateDetector(conf_threshold=0.5)
 
 1. ✅ Test the API with sample images
 2. ✅ Integrate with Flutter UI
-3. ⬜ Add authentication (JWT tokens)
-4. ⬜ Add rate limiting
-5. ⬜ Deploy to production server
-6. ⬜ Add batch detection endpoint
-7. ⬜ Add WebSocket support for real-time detection
+3. ✅ IP camera RTSP streams with MJPEG preview
+4. ✅ WebSocket support for real-time detection
+5. ⬜ Add authentication (JWT tokens)
+6. ⬜ Add rate limiting
+7. ⬜ Deploy to production server
+8. ⬜ Add batch detection endpoint
 
 ## License
 

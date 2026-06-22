@@ -1,5 +1,5 @@
-# Docs folder
-Docs/
+# Submodules and embedded repos
+yolov5/
 
 # Python
 __pycache__/

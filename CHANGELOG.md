@@ -1,0 +1,54 @@
+# Changelog
+
+All notable changes to Parkinox v3 are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+---
+
+## [Unreleased]
+
+### Added
+
+- **Local IP camera pipeline** — FastAPI ingests RTSP streams, runs YOLO detection, serves MJPEG preview, broadcasts `plate_detected` via WebSocket
+- **`camera_stream_service.py`** — Entry/exit camera workers with detection cooldown and reconnect logic
+- **FastAPI endpoints** — `POST /cameras/config`, `GET /cameras/status`, `GET /cameras/{entry|exit}/mjpeg`, `WebSocket /ws`
+- **Operator app** — `MjpegPreview` widget, `FastApiCameraApi`, `fastApiDetectionControllerProvider`
+- **Hikvision quick-setup** in IP camera settings (channels 101/102)
+- **Windows build script** — `parkinox_op/build_windows.bat` with VS 2026 Flutter SDK patch
+- **`run_all.bat`** — One-command launcher for FastAPI, Django, and operator app
+- **Comprehensive documentation** — `docs/` architecture, API, camera, and getting started guides
+
+### Changed
+
+- **IP camera architecture** — Detection moved from Flutter screenshot loop to local FastAPI (operator PC)
+- **Operator dashboard** — IP cameras display preview from FastAPI MJPEG instead of direct RTSP in Flutter
+- **Flutter SDK constraints** — Aligned to Flutter 3.35.3 / Dart 3.9.2
+- **Django default port** — Development uses port 8001 (FastAPI uses 8000)
+- **Root README** — Rewritten with architecture diagrams and professional documentation index
+
+### Fixed
+
+- **Windows CMake build** — Stale cache when project path changes; `flutter clean` guidance
+- **Visual Studio 2026** — Flutter SDK mapping for Windows desktop builds
+- **IP camera settings** — `TextEditingController` lifecycle bug on rebuild
+- **`TextEditingController` in settings** — Persisted URL no longer resets on parent rebuild
+
+---
+
+## [1.0.0] — Initial release
+
+### Added
+
+- Django REST API — accounts, parking, plates, wallets, reports
+- Operator Flutter desktop app — dashboard, gate events, plate approval
+- Student Flutter mobile app — OTP auth, plates, wallet
+- FastAPI YOLOv5 bridge — `/detect`, `/health`, OpenAPI docs
+- Django Channels WebSocket — operator panel real-time updates
+- Persian plate format support and RTL operator UI
+- SQLite local cache for operator plate entries
+
+---
+
+[Unreleased]: https://github.com/your-org/parkinox-v3/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/your-org/parkinox-v3/releases/tag/v1.0.0
