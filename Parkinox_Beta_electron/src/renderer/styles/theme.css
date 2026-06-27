@@ -1,0 +1,90 @@
+/*
+ * Design tokens — mapped 1:1 from the Flutter operator app
+ *   app_colors.dart   → colors
+ *   text_styles.dart  → type scale (Vazirmatn)
+ *   app_theme.dart    → radii / spacing
+ * Beta refinements: softer elevations, subtle gradients, motion tokens.
+ */
+
+:root {
+  /* === BACKGROUNDS === */
+  --bg-primary: #0f1117;
+  --bg-surface: #1a1d27;
+  --bg-card: #22263a;
+  --bg-elevated: #11141a;
+
+  /* Beta: layered gradient for depth (kept very subtle) */
+  --bg-gradient: radial-gradient(1200px 800px at 85% -10%, rgba(59, 130, 246, 0.08), transparent 60%),
+    radial-gradient(900px 700px at 0% 110%, rgba(168, 85, 247, 0.06), transparent 55%), var(--bg-primary);
+
+  /* === ACCENTS === */
+  --green: #22c55e;
+  --red: #ef4444;
+  --orange: #f97316;
+  --blue: #3b82f6;
+  --purple: #a855f7;
+  --pink: #ec4899;
+  --teal: #14b8a6;
+  --amber: #f59e0b;
+
+  /* === TEXT === */
+  --text-primary: #f1f5f9;
+  --text-muted: #64748b;
+  --text-disabled: #475569;
+  --text-dim: #5c6b7f;
+
+  /* === LINES === */
+  --divider: #334155;
+  --border: #475569;
+  --border-soft: rgba(71, 85, 105, 0.35);
+
+  /* === PLATE === */
+  --plate-blue: #003399;
+  --plate-flag-green: #239f40;
+  --plate-flag-red: #da0000;
+
+  /* === RADII === */
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-full: 9999px;
+
+  /* === SPACING === */
+  --s-xs: 4px;
+  --s-sm: 8px;
+  --s-md: 16px;
+  --s-lg: 24px;
+  --s-xl: 32px;
+  --s-xxl: 48px;
+
+  /* === TYPE === */
+  --font: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+
+  /* === ELEVATION (Beta) === */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.5);
+  --glow-green: 0 0 0 1px rgba(34, 197, 94, 0.35), 0 0 24px rgba(34, 197, 94, 0.18);
+
+  /* === MOTION === */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 140ms;
+  --dur: 220ms;
+}
+
+/* ── Type scale (matches text_styles.dart) ───────────────────────── */
+.t-display-lg { font-size: 32px; font-weight: 700; line-height: 1.2; }
+.t-display-md { font-size: 28px; font-weight: 700; line-height: 1.2; }
+.t-headline-lg { font-size: 22px; font-weight: 700; line-height: 1.3; }
+.t-headline-md { font-size: 20px; font-weight: 500; line-height: 1.3; }
+.t-headline-sm { font-size: 18px; font-weight: 500; line-height: 1.3; }
+.t-title-lg { font-size: 16px; font-weight: 700; line-height: 1.4; }
+.t-title-md { font-size: 16px; font-weight: 500; line-height: 1.4; }
+.t-title-sm { font-size: 14px; font-weight: 500; line-height: 1.4; }
+.t-body-lg { font-size: 16px; font-weight: 400; line-height: 1.5; }
+.t-body-md { font-size: 14px; font-weight: 400; line-height: 1.5; }
+.t-body-sm { font-size: 12px; font-weight: 400; line-height: 1.5; }
+.t-label-md { font-size: 12px; font-weight: 700; line-height: 1.2; letter-spacing: 0.5px; }
+.t-label-sm { font-size: 10px; font-weight: 700; line-height: 1.2; letter-spacing: 0.5px; }
+.t-caption { font-size: 11px; font-weight: 400; line-height: 1.3; color: var(--text-muted); }

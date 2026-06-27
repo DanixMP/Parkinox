@@ -2,20 +2,23 @@
 FastAPI Bridge for Parkinox Plate Detection System
 Modern API bridge between Flutter UI and YOLOv5 Core
 """
+import asyncio
+import json
 import logging
 from pathlib import Path
 from typing import Optional
 import io
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, status
+from fastapi import FastAPI, File, UploadFile, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 import cv2
 import numpy as np
 import uvicorn
 
 from plate_detector import PlateDetector
+from camera_stream_service import CameraManager
 
 # Configure logging
 logging.basicConfig(
@@ -44,6 +47,7 @@ app.add_middleware(
 
 # Global detector instance
 detector: Optional[PlateDetector] = None
+camera_manager: Optional[CameraManager] = None
 
 
 # Pydantic models for request/response
@@ -71,6 +75,14 @@ class FilePathRequest(BaseModel):
     path: str = Field(..., description="Absolute path to image file")
 
 
+class CameraConfigRequest(BaseModel):
+    """IP camera configuration pushed from Flutter settings."""
+    entry_enabled: bool = False
+    exit_enabled: bool = False
+    entry_url: Optional[str] = None
+    exit_url: Optional[str] = None
+
+
 class ErrorResponse(BaseModel):
     """Error response model"""
     success: bool = False
@@ -81,13 +93,15 @@ class ErrorResponse(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     """Initialize detector on startup"""
-    global detector
+    global detector, camera_manager
     try:
         logger.info("="*60)
         logger.info("Parkinox FastAPI - Starting up...")
         logger.info("="*60)
         logger.info("Initializing plate detector...")
         detector = PlateDetector()
+        camera_manager = CameraManager(detector)
+        camera_manager.set_event_loop(asyncio.get_running_loop())
         logger.info(f"✓ Plate detector initialized on device: {detector.device}")
         logger.info("✓ FastAPI server ready")
     except Exception as e:
@@ -99,6 +113,8 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on shutdown"""
     logger.info("Shutting down Parkinox FastAPI...")
+    if camera_manager is not None:
+        camera_manager.shutdown()
 
 
 @app.get("/", tags=["General"])
@@ -300,6 +316,101 @@ async def get_models_info():
         "conf_threshold": detector.conf_threshold,
         "models_loaded": True
     }
+
+
+@app.post("/cameras/config", tags=["Cameras"])
+async def update_camera_config(config: CameraConfigRequest):
+    """Apply entry/exit IP camera RTSP URLs from Flutter settings."""
+    if camera_manager is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Camera manager not initialized",
+        )
+
+    camera_manager.apply_config(config.model_dump())
+    logger.info(
+        "Camera config updated: entry=%s exit=%s",
+        config.entry_enabled,
+        config.exit_enabled,
+    )
+    return {"success": True, "status": camera_manager.status()}
+
+
+@app.get("/cameras/status", tags=["Cameras"])
+async def get_camera_status():
+    """Current IP camera connection state."""
+    if camera_manager is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Camera manager not initialized",
+        )
+    return camera_manager.status()
+
+
+async def _mjpeg_generator(slot: str):
+    boundary = b"--frame"
+    if camera_manager is None:
+        return
+
+    stream = camera_manager.stream_for(slot)
+    while stream.enabled:
+        jpeg = stream.get_latest_jpeg()
+        if jpeg:
+            yield (
+                boundary
+                + b"\r\nContent-Type: image/jpeg\r\n\r\n"
+                + jpeg
+                + b"\r\n"
+            )
+        await asyncio.sleep(0.05)
+
+
+@app.get("/cameras/{slot}/mjpeg", tags=["Cameras"])
+async def camera_mjpeg(slot: str):
+    """MJPEG preview stream for Flutter operator UI."""
+    if slot not in ("entry", "exit"):
+        raise HTTPException(status_code=404, detail="Unknown camera slot")
+    if camera_manager is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Camera manager not initialized",
+        )
+
+    stream = camera_manager.stream_for(slot)
+    if not stream.enabled:
+        raise HTTPException(status_code=404, detail="Camera not enabled")
+
+    return StreamingResponse(
+        _mjpeg_generator(slot),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """Push plate_detected events to Flutter; accept ping/pong."""
+    if camera_manager is None:
+        await websocket.close(code=1013)
+        return
+
+    await camera_manager.add_client(websocket)
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            msg_type = data.get("type")
+            if msg_type == "ping":
+                await websocket.send_text('{"type":"pong"}')
+            elif msg_type == "camera_config":
+                camera_manager.apply_config(data.get("data", {}))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        camera_manager.remove_client(websocket)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,15 @@ timeout /t 3 /nobreak >nul
 
 echo [3/3] Starting Flutter App...
 cd /d "%~dp0parkinox_op"
+if not exist "build\windows\x64\runner\Release\parkinox_op.exe" (
+    echo Flutter executable not found. Building Windows app...
+    call build_windows.bat
+    if errorlevel 1 (
+        echo Windows build failed. See errors above.
+        pause
+        exit /b 1
+    )
+)
 start "" "build\windows\x64\runner\Release\parkinox_op.exe"
 
 echo.
