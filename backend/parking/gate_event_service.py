@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 from django.db import transaction
 
 from .models import GateEvent
+from .cross_camera_guard import cross_camera_conflict
 from .plate_utils import find_plate_record, normalize_plate_strict
 from .services import ParkingSessionService
 
@@ -53,6 +54,10 @@ def confirm_gate_event(
 
     if not plate_confirmed_normalized:
         raise ValueError('plate_confirmed is required')
+
+    conflict = cross_camera_conflict(plate_confirmed_normalized, direction)
+    if conflict:
+        raise ValueError(conflict)
 
     matched_plate = find_plate_record(plate_confirmed_normalized)
     matched_user = matched_plate.user if matched_plate else None

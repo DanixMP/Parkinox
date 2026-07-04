@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(timeout 25 npx electron . --dev)",
+      "Bash(echo \"exit: $?\")"
+    ]
+  }
+}

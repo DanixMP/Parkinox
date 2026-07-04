@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import threading
 import time
 import uuid
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 DETECTION_INTERVAL_SEC = 3.0
 FRAME_READ_INTERVAL_SEC = 0.05
 PLATE_COOLDOWN_SEC = 10.0
-CROSS_CAMERA_COOLDOWN_SEC = 60.0
+CROSS_CAMERA_COOLDOWN_SEC = 120.0
 
 CAMERA_WS_IDS = {
     "entry": "entry_camera",
@@ -232,8 +233,23 @@ class CameraManager:
             return "exit"
         return None
 
+    @staticmethod
+    def _plate_identity_key(plate_text: str) -> str:
+        """Match plates across cameras even if spacing differs."""
+        compact = re.sub(r"[\s_\-]+", "", (plate_text or "").strip())
+        # National: 2 digits + letter + 3 digits (+ optional 2 region digits)
+        m = re.match(r"^(\d{2})([آ-یA-Za-z])(\d{3})(\d{0,2})$", compact)
+        if m:
+            return f"{m.group(1)}{m.group(2)}{m.group(3)}"
+        if len(compact) >= 5 and compact[:5].isdigit():
+            return compact[:5]
+        return compact
+
     def _can_emit_cross_camera(self, plate_text: str, slot: str) -> bool:
-        """Suppress the same plate on the opposite camera for one minute."""
+        """Suppress the same plate on the opposite camera for two minutes."""
+        key = self._plate_identity_key(plate_text)
+        if not key:
+            return True
         now = time.time()
         with self._global_plate_lock:
             expired = [
@@ -244,7 +260,7 @@ class CameraManager:
             for plate in expired:
                 del self._global_plates[plate]
 
-            prev = self._global_plates.get(plate_text)
+            prev = self._global_plates.get(key)
             if prev is not None:
                 prev_time, prev_slot = prev
                 if (
@@ -252,14 +268,15 @@ class CameraManager:
                     and (now - prev_time) < CROSS_CAMERA_COOLDOWN_SEC
                 ):
                     logger.info(
-                        "Cross-camera cooldown: %s seen on %s, ignoring %s",
+                        "Cross-camera cooldown (%ss): %s seen on %s, ignoring %s",
+                        int(CROSS_CAMERA_COOLDOWN_SEC),
                         plate_text,
                         prev_slot,
                         slot,
                     )
                     return False
 
-            self._global_plates[plate_text] = (now, slot)
+            self._global_plates[key] = (now, slot)
             return True
 
     def _emit_detection(self, data: dict) -> None:
