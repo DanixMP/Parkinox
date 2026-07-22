@@ -1,0 +1,152 @@
+{% extends "dashboard/base.html" %}
+{% block title %}تحلیل | Parkinox Cloud{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>تحلیل و نمودارها</h1><div class="muted">{{ site.site_id }} · {{ days }} روز اخیر</div></div>
+  <form method="get" class="filters">
+    <select name="days">
+      <option value="7" {% if days == 7 %}selected{% endif %}>۷ روز</option>
+      <option value="14" {% if days == 14 %}selected{% endif %}>۱۴ روز</option>
+      <option value="30" {% if days == 30 %}selected{% endif %}>۳۰ روز</option>
+    </select>
+    <button type="submit">اعمال</button>
+  </form>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi"><div class="label">اشغال فعلی / ظرفیت</div><div class="value">{{ data.parked_now }} / {{ data.capacity }}</div></div>
+  <div class="kpi"><div class="label">توقف طولانی</div><div class="value">{{ data.long_stay }}</div></div>
+  <div class="kpi"><div class="label">اصلاح اپراتور</div><div class="value">{{ data.corrections }}</div></div>
+  <div class="kpi"><div class="label">میانگین هزینه</div><div class="value">{{ data.avg_fee }}</div></div>
+</div>
+
+<div class="charts-grid">
+  <div class="panel chart-panel"><h2>ورود/خروج ساعتی</h2><div class="chart-canvas-host"><canvas id="hourly"></canvas></div></div>
+  <div class="panel chart-panel"><h2>ورود/خروج روزانه</h2><div class="chart-canvas-host"><canvas id="daily"></canvas></div></div>
+  <div class="panel chart-panel"><h2>درآمد روزانه</h2><div class="chart-canvas-host"><canvas id="revenue"></canvas></div></div>
+  <div class="panel chart-panel"><h2>روش پرداخت</h2><div class="chart-canvas-host"><canvas id="payment"></canvas></div></div>
+  <div class="panel chart-panel"><h2>اشغال در زمان</h2><div class="chart-canvas-host"><canvas id="occupancy"></canvas></div></div>
+  <div class="panel chart-panel"><h2>توزیع مدت پارک</h2><div class="chart-canvas-host"><canvas id="duration"></canvas></div></div>
+  <div class="panel chart-panel"><h2>شمارش بر اساس دوربین</h2><div class="chart-canvas-host"><canvas id="gates"></canvas></div></div>
+  <div class="panel">
+    <h2>خودروهای پرتکرار</h2>
+    <table class="data">
+      <thead><tr><th>پلاک</th><th>تعداد</th></tr></thead>
+      <tbody>
+      {% for plate, count in data.repeats %}
+        <tr><td>{{ plate }}</td><td>{{ count }}</td></tr>
+      {% empty %}
+        <tr><td colspan="2">داده کافی نیست</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <h2 style="margin-top:1rem">نقشه حرارتی ورود (روز هفته × ساعت)</h2>
+    <div id="heatmap" style="overflow:auto"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ data|json_script:"analytics-data" }}
+<script>
+const data = JSON.parse(document.getElementById('analytics-data').textContent);
+const hours = data.hours || [];
+const chartOpts = {
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: false,
+  resizeDelay: 50,
+};
+new Chart(document.getElementById('hourly'), {
+  type: 'bar',
+  data: {
+    labels: hours,
+    datasets: [
+      { label: 'ورود', data: data.entries_by_hour, backgroundColor: '#2c5282' },
+      { label: 'خروج', data: data.exits_by_hour, backgroundColor: '#0f766e' },
+    ]
+  },
+  options: chartOpts
+});
+new Chart(document.getElementById('daily'), {
+  type: 'bar',
+  data: {
+    labels: data.daily_labels,
+    datasets: [
+      { label: 'ورود', data: data.daily_entries, backgroundColor: '#1f3a5f' },
+      { label: 'خروج', data: data.daily_exits, backgroundColor: '#64748b' },
+    ]
+  },
+  options: chartOpts
+});
+new Chart(document.getElementById('revenue'), {
+  type: 'line',
+  data: {
+    labels: data.daily_labels,
+    datasets: [{ label: 'درآمد', data: data.daily_revenue, borderColor: '#0f766e', tension: 0.25, fill: false }]
+  },
+  options: chartOpts
+});
+new Chart(document.getElementById('payment'), {
+  type: 'doughnut',
+  data: {
+    labels: (data.payment_mix || []).map(x => x.payment_method || '—'),
+    datasets: [{ data: (data.payment_mix || []).map(x => x.c), backgroundColor: ['#2c5282','#0f766e','#b45309','#64748b'] }]
+  },
+  options: chartOpts
+});
+new Chart(document.getElementById('occupancy'), {
+  type: 'line',
+  data: {
+    labels: (data.occupancy || []).map(x => x.date),
+    datasets: [{
+      label: 'اشغال',
+      data: (data.occupancy || []).map(x => x.parked),
+      borderColor: '#1f3a5f',
+      backgroundColor: 'rgba(31,58,95,0.15)',
+      fill: true,
+      tension: 0.3
+    }]
+  },
+  options: chartOpts
+});
+const dur = data.durations || [];
+const bins = [0,15,30,60,120,240,480,99999];
+const hist = new Array(bins.length-1).fill(0);
+dur.forEach(v => { for (let i=0;i<bins.length-1;i++){ if(v>=bins[i] && v<bins[i+1]){ hist[i]++; break; } } });
+new Chart(document.getElementById('duration'), {
+  type: 'bar',
+  data: {
+    labels: ['0-15','15-30','30-60','1-2h','2-4h','4-8h','8h+'],
+    datasets: [{ label: 'تعداد', data: hist, backgroundColor: '#415a77' }]
+  },
+  options: chartOpts
+});
+new Chart(document.getElementById('gates'), {
+  type: 'bar',
+  data: {
+    labels: (data.gate_counts || []).map(x => x.camera_id || '—'),
+    datasets: [{ label: 'رویداد', data: (data.gate_counts || []).map(x => x.c), backgroundColor: '#2c5282' }]
+  },
+  options: Object.assign({ indexAxis: 'y' }, chartOpts)
+});
+const heat = data.heatmap || [];
+const days = ['دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه','شنبه','یکشنبه'];
+let html = '<table class="data"><thead><tr><th></th>';
+for (let h=0;h<24;h++) html += `<th>${h}</th>`;
+html += '</tr></thead><tbody>';
+heat.forEach((row, i) => {
+  html += `<tr><th>${days[i]||i}</th>`;
+  const max = Math.max(1, ...row);
+  row.forEach(v => {
+    const a = (v/max).toFixed(2);
+    html += `<td style="background:rgba(31,58,95,${a});color:${a>0.55?'#fff':'#142033'};text-align:center">${v||''}</td>`;
+  });
+  html += '</tr>';
+});
+html += '</tbody></table>';
+document.getElementById('heatmap').innerHTML = html;
+</script>
+{% endblock %}

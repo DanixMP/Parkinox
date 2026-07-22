@@ -4,14 +4,14 @@ Reference for Parkinox v3 HTTP and WebSocket APIs. The system exposes two indepe
 
 | Service | Base URL | Auth |
 |---------|----------|------|
-| **FastAPI** (local) | `http://localhost:8000` | None (localhost trust) |
+| **FastAPI** (local) | `http://localhost:8002` | None (localhost trust) |
 | **Django** (remote) | `http://localhost:8001/api` | JWT Bearer |
 
 ---
 
 ## FastAPI — Local detection service
 
-Interactive documentation: **http://localhost:8000/docs**
+Interactive documentation: **http://localhost:8002/docs**
 
 ### Health & info
 
@@ -80,8 +80,8 @@ Interactive documentation: **http://localhost:8000/docs**
 |--------|------|-------------|
 | `POST` | `/cameras/config` | Push entry/exit RTSP config from Flutter |
 | `GET` | `/cameras/status` | Connection state per slot |
-| `GET` | `/cameras/entry/mjpeg` | MJPEG preview stream (entry) |
-| `GET` | `/cameras/exit/mjpeg` | MJPEG preview stream (exit) |
+| `GET` | `/cameras/entry/mjpeg` | MJPEG debug stream (entry) |
+| `GET` | `/cameras/exit/mjpeg` | MJPEG debug stream (exit) |
 
 **`POST /cameras/config` body:**
 
@@ -119,7 +119,7 @@ MJPEG response: `Content-Type: multipart/x-mixed-replace; boundary=frame`
 
 ### FastAPI WebSocket
 
-**URL:** `ws://localhost:8000/ws`
+**URL:** `ws://localhost:8002/ws`
 
 #### Server → client messages
 
@@ -299,7 +299,7 @@ or field-level validation errors per DRF standard.
 | `POST /detect` (GPU) | 50–150 ms |
 | `POST /detect` (CPU) | 200–500 ms |
 | IP camera detection | Every 3 seconds per stream |
-| MJPEG frame rate | ~20 fps (50 ms sleep in generator) |
+| RTSP preview path | Flutter `RtspPreview` on channel 102 |
 
 ---
 
@@ -309,15 +309,15 @@ Default settings stored in `SettingsModel`:
 
 | Field | Default |
 |-------|---------|
-| `fastApiUrl` | `http://localhost:8000` |
+| `fastApiUrl` | `http://localhost:8002` |
 | `djangoApiUrl` | `http://localhost:8001/api` |
 | `wsUrl` | `ws://localhost:8001/ws/panel/` |
 
 Derived URLs in `FastApiCameraApi`:
 
-- WebSocket: `ws://localhost:8000/ws`
-- Entry MJPEG: `http://localhost:8000/cameras/entry/mjpeg`
-- Exit MJPEG: `http://localhost:8000/cameras/exit/mjpeg`
+- WebSocket: `ws://localhost:8002/ws`
+- Detection stream (FastAPI): `rtsp://.../Streaming/Channels/101`
+- Preview stream (Flutter): `rtsp://.../Streaming/Channels/102`
 
 ---
 

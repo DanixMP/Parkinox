@@ -1,0 +1,22 @@
+{% load static %}
+<div class="plate-input-ir" data-plate-root>
+  <div class="plate-strip">
+    <div class="flag"><span class="g"></span><span class="w"></span><span class="r"></span></div>
+    <div>I.R.</div>
+    <div>IRAN</div>
+  </div>
+  <div class="plate-input-cells">
+    <input type="text" class="plate-cell plate-digit" data-plate="d1" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۱">
+    <input type="text" class="plate-cell plate-digit" data-plate="d2" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۲">
+    <span class="plate-gap"></span>
+    <button type="button" class="plate-cell plate-letter empty" data-plate="letter" aria-label="حرف پلاک">حرف</button>
+    <span class="plate-gap"></span>
+    <input type="text" class="plate-cell plate-digit" data-plate="d3" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۳">
+    <input type="text" class="plate-cell plate-digit" data-plate="d4" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۴">
+    <input type="text" class="plate-cell plate-digit" data-plate="d5" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۵">
+    <span class="plate-sep">-</span>
+    <input type="text" class="plate-cell plate-digit" data-plate="d6" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۶">
+    <input type="text" class="plate-cell plate-digit" data-plate="d7" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="رقم ۷">
+  </div>
+  <input type="hidden" name="plate" value="{{ plate_value|default:'' }}">
+</div>

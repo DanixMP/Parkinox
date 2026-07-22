@@ -34,6 +34,21 @@ db.sqlite3
 /media
 /staticfiles
 
+# Plate fail-capture artifacts (training / review)
+Core/data_fails/
+
+# Success / debug capture media (runtime artifacts, not source)
+Core/parking_media/
+Core/_debug_success_media/
+
+# Cursor / local agent context (not shared source)
+.cursor/
+
+# Local scratch / temp tooling
+parkinox_op/_tools/
+parkinox_op/_rar_*.txt
+backend/_tmp_*.py
+
 # IDE
 .vscode/
 .idea/
@@ -45,6 +60,9 @@ db.sqlite3
 # Environment
 .env
 .env.local
+**/.env
+**/.venv/
+**/venv/
 
 # Node (if applicable)
 node_modules/

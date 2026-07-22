@@ -9,7 +9,7 @@ Welcome to the technical documentation for **Parkinox v3**, a smart university p
 | **New developers** | [GETTING_STARTED.md](GETTING_STARTED.md) → [ARCHITECTURE.md](ARCHITECTURE.md) |
 | **Operator / IT setup** | [GETTING_STARTED.md](GETTING_STARTED.md) → [CAMERA_INTEGRATION.md](CAMERA_INTEGRATION.md) |
 | **Backend engineers** | [API_OVERVIEW.md](API_OVERVIEW.md) → [../backend/DEPLOYMENT_UBUNTU_24.md](../backend/DEPLOYMENT_UBUNTU_24.md) |
-| **AI / detection work** | [../Core/FASTAPI_README.md](../Core/FASTAPI_README.md) → [CAMERA_INTEGRATION.md](CAMERA_INTEGRATION.md) |
+| **AI / detection work** | [../Core/FASTAPI_README.md](../Core/FASTAPI_README.md) → [CAMERA_INTEGRATION.md](CAMERA_INTEGRATION.md) → [DETECTION_FAIL_CAPTURE.md](DETECTION_FAIL_CAPTURE.md) |
 | **Flutter developers** | [ARCHITECTURE.md](ARCHITECTURE.md) → `parkinox_op/lib/` source |
 
 ## Document index
@@ -21,7 +21,8 @@ Welcome to the technical documentation for **Parkinox v3**, a smart university p
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Multi-tier design, detection pipeline, WebSocket flows |
 | [GETTING_STARTED.md](GETTING_STARTED.md) | Prerequisites, installation, first run, troubleshooting |
 | [API_OVERVIEW.md](API_OVERVIEW.md) | FastAPI and Django REST/WebSocket reference |
-| [CAMERA_INTEGRATION.md](CAMERA_INTEGRATION.md) | USB, webcam, Hikvision RTSP, MJPEG, config sync |
+| [CAMERA_INTEGRATION.md](CAMERA_INTEGRATION.md) | USB, webcam, Hikvision RTSP, channel split (101/102), config sync |
+| [DETECTION_FAIL_CAPTURE.md](DETECTION_FAIL_CAPTURE.md) | Fail capture, operator review, metrics, ingest APIs |
 
 ### Module-specific docs
 
@@ -38,8 +39,8 @@ Welcome to the technical documentation for **Parkinox v3**, a smart university p
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        OPERATOR PC (local)                       │
-│  ┌──────────────┐    WS/MJPEG/HTTP    ┌──────────────────────┐ │
-│  │ parkinox_op  │ ◄──────────────────►│ FastAPI :8000 (Core) │ │
+│  ┌──────────────┐    WS/HTTP + RTSP   ┌──────────────────────┐ │
+│  │ parkinox_op  │ ◄──────────────────►│ FastAPI :8002 (Core) │ │
 │  │   Flutter    │                     │ YOLOv5 + OpenCV RTSP │ │
 │  └──────┬───────┘                     └──────────┬───────────┘ │
 │         │                                        │              │
@@ -66,13 +67,13 @@ Welcome to the technical documentation for **Parkinox v3**, a smart university p
 
 | Port | Service |
 |------|---------|
-| 8000 | FastAPI (local detection) |
+| 8002 | FastAPI (local detection) |
 | 8001 | Django (remote backend) |
 
 ## Getting help
 
 1. Check [GETTING_STARTED.md — Troubleshooting](GETTING_STARTED.md#troubleshooting)
-2. Verify FastAPI health: `GET http://localhost:8000/health`
+2. Verify FastAPI health: `GET http://localhost:8002/health`
 3. Verify Django health: `GET http://localhost:8001/api/health/`
 4. Review FastAPI logs in the Core terminal window
 5. Review Django logs in the backend terminal window

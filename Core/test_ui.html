@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parkinox Flutter Plate Tester</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #121a2b;
+      --border: #243047;
+      --text: #e8eef7;
+      --muted: #8ea0b8;
+      --accent: #3b82f6;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --err: #ef4444;
+      --entry: #16a34a;
+      --exit: #ea580c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(1200px 600px at 10% -10%, #1a2744, var(--bg));
+      color: var(--text);
+      padding: 24px;
+      line-height: 1.45;
+      min-height: 100vh;
+    }
+    h1 { font-size: 1.45rem; font-weight: 650; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin: 6px 0 20px; }
+    .sub a { color: #93c5fd; }
+    .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 16px; }
+    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: color-mix(in srgb, var(--panel) 92%, #000);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+    }
+    .card h2 {
+      font-size: 0.95rem;
+      color: #cbd5e1;
+      margin-bottom: 12px;
+      letter-spacing: 0.02em;
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+    label.field {
+      display: flex; flex-direction: column; gap: 4px;
+      font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+      flex: 1; min-width: 140px;
+    }
+    input[type=text], select {
+      padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border);
+      background: #0b1322; color: var(--text); font-size: 0.92rem;
+    }
+    button, label.btn {
+      background: var(--accent); color: #fff; border: none; padding: 9px 14px;
+      border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 600;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.secondary { background: #334155; }
+    button.entry { background: var(--entry); }
+    button.exit { background: var(--exit); }
+    button.warn { background: var(--warn); color: #111; }
+    .badge {
+      display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.75rem;
+    }
+    .badge.ok { background: #14532d; color: var(--ok); }
+    .badge.err { background: #450a0a; color: var(--err); }
+    .badge.wait { background: #422006; color: #fbbf24; }
+    #preview {
+      max-width: 100%; max-height: 220px; border-radius: 8px;
+      border: 1px solid var(--border); display: none; margin: 8px 0;
+    }
+    pre, .log {
+      background: #070d18; border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px; font-size: 0.78rem; overflow: auto; max-height: 260px;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .log { max-height: 360px; min-height: 180px; }
+    .plate-box {
+      font-family: Tahoma, "Segoe UI", sans-serif;
+      direction: rtl; text-align: center;
+      background: #fff; color: #111; border: 3px solid #111;
+      border-radius: 8px; padding: 12px 16px; font-size: 1.6rem; font-weight: 800;
+      letter-spacing: 0.04em; margin: 8px 0 12px; min-height: 54px;
+    }
+    .meta { font-size: 0.82rem; color: var(--muted); }
+    .meta strong { color: var(--text); }
+    .hint {
+      font-size: 0.8rem; color: var(--muted); margin-top: 8px;
+      padding: 8px 10px; border-radius: 8px; background: #0b1322; border: 1px dashed var(--border);
+    }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 640px) { .split { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>Flutter plate tester</h1>
+  <p class="sub">
+    Upload an image or inject random Iranian plates (national / free zone) as standard
+    <code>plate_detected</code> WebSocket events for the operator app.
+    Open <a href="/debug">/debug</a> for live cameras · API <a href="/docs">/docs</a>
+  </p>
+
+  <div class="grid">
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <h2>Target</h2>
+        <div class="row">
+          <label class="field">Base URL
+            <input type="text" id="baseUrl" />
+          </label>
+          <label class="field">Camera
+            <select id="cameraId">
+              <option value="entry_camera">entry_camera (ورود)</option>
+              <option value="exit_camera">exit_camera (خروج)</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <button onclick="wsConnect()" id="wsConnectBtn">Connect /ws</button>
+          <button class="secondary" onclick="wsDisconnect()" id="wsDisconnectBtn" disabled>Disconnect</button>
+          <button class="secondary" onclick="checkHealth()">Health</button>
+          <span id="wsBadge" class="badge wait">ws disconnected</span>
+          <span id="healthBadge" class="badge wait">api ?</span>
+        </div>
+        <p class="hint">
+          Flutter must be connected to the same FastAPI WebSocket
+          (<code>ws://localhost:8002/ws</code>). Injected events bypass camera cooldown.
+        </p>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <h2>1 · Upload photo → send to recognition (5s hold)</h2>
+        <p class="hint" style="margin-bottom:12px">
+          Choose a plate photo, then <strong>Send → Entry/Exit</strong>.
+          The preview stays visible for <strong>5 seconds</strong> while
+          <code>POST /detect</code> runs. On success the plate is injected to Flutter.
+          On invalid/empty OCR (Type A/B) the photo is <strong>saved for operator review</strong>
+          (بازبینی تشخیص‌های ناموفق) — not injected as a fake valid plate.
+        </p>
+        <div class="row">
+          <label class="btn">
+            <input type="file" id="fileInput" accept="image/*" hidden onchange="onFile(this)" />
+            Choose image
+          </label>
+          <button onclick="runDetect()" id="detectBtn" disabled>POST /detect only</button>
+          <button class="warn" onclick="sendPhotoToRecognition('entry_camera')" id="pushDetectBtn" disabled>Send → Entry</button>
+          <button class="exit" onclick="sendPhotoToRecognition('exit_camera')" id="pushDetectExitBtn" disabled>Send → Exit</button>
+        </div>
+        <img id="preview" alt="preview" />
+        <p class="meta" id="detectMeta">Select a plate photo.</p>
+        <div id="recognizeCountdown" class="badge wait" style="display:none;margin:6px 0">Recognizing…</div>
+        <pre id="detectOut">—</pre>
+      </div>
+
+      <div class="card">
+        <h2>2 · Random / manual standard plates → Flutter</h2>
+        <p class="hint" style="margin-bottom:12px">
+          Use the <strong>Exit</strong> buttons to test the Flutter 5s auto-confirm timer on the exit panel.
+        </p>
+        <div class="split" style="margin-bottom:12px">
+          <div>
+            <div class="meta" style="margin-bottom:6px"><strong>Entry</strong> (ورود)</div>
+            <div class="row">
+              <button class="entry" onclick="sendRandom('national', 'entry_camera')">National → Entry</button>
+              <button class="entry" onclick="sendRandom('free_zone', 'entry_camera')">Free zone → Entry</button>
+            </div>
+          </div>
+          <div>
+            <div class="meta" style="margin-bottom:6px"><strong>Exit</strong> (خروج) — auto-confirm timer</div>
+            <div class="row">
+              <button class="exit" onclick="sendRandom('national', 'exit_camera')">National → Exit</button>
+              <button class="exit" onclick="sendRandom('free_zone', 'exit_camera')">Free zone → Exit</button>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <label class="field">Free zone (for free-zone random)
+            <select id="freeZone">
+              <option value="">auto</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label class="field">Manual plate (any accepted format)
+            <input type="text" id="manualPlate" placeholder="12 ب 345 67  or  1724366" />
+          </label>
+          <button class="entry" onclick="sendManual('entry_camera')">Send → Entry</button>
+          <button class="exit" onclick="sendManual('exit_camera')">Send → Exit</button>
+        </div>
+        <div class="plate-box" id="platePreview">—</div>
+        <p class="meta" id="injectMeta">
+          National display: <strong>۱۲ ب ۳۴۵ ۶۷</strong> ·
+          Free zone: <strong>۱۷۲۴۳ ۶۶</strong>
+        </p>
+        <pre id="injectOut">—</pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>WebSocket log (what Flutter receives)</h2>
+      <div class="row">
+        <button class="secondary" onclick="clearLog()">Clear</button>
+        <button class="secondary" onclick="wsPing()">Ping</button>
+      </div>
+      <div class="log" id="wsLog">Connect /ws, then inject plates…</div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let selectedFile = null;
+    let lastDetection = null;
+    let ws = null;
+
+    function base() {
+      return ($('baseUrl').value || window.location.origin).replace(/\/$/, '');
+    }
+
+    function cameraId() {
+      return $('cameraId').value;
+    }
+
+    function wsUrl() {
+      const u = new URL(base());
+      u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+      u.pathname = '/ws';
+      u.search = '';
+      u.hash = '';
+      return u.toString();
+    }
+
+    function log(msg) {
+      const el = $('wsLog');
+      const ts = new Date().toLocaleTimeString();
+      el.textContent = `[${ts}] ${msg}\n` + el.textContent;
+    }
+
+    function clearLog() { $('wsLog').textContent = ''; }
+
+    function showPlate(display, canonical) {
+      $('platePreview').textContent = display || '—';
+      if (canonical) {
+        $('injectMeta').innerHTML =
+          `Display: <strong>${display}</strong> · Canonical: <strong>${canonical}</strong>`;
+      }
+    }
+
+    async function loadMeta() {
+      try {
+        const r = await fetch(`${base()}/test/meta`);
+        const data = await r.json();
+        const sel = $('freeZone');
+        for (const z of data.free_zones || []) {
+          const opt = document.createElement('option');
+          opt.value = z;
+          opt.textContent = z;
+          sel.appendChild(opt);
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    async function checkHealth() {
+      try {
+        const r = await fetch(`${base()}/health`);
+        const data = await r.json();
+        const ok = r.ok && data.models_loaded;
+        $('healthBadge').className = ok ? 'badge ok' : 'badge err';
+        $('healthBadge').textContent = ok ? `api ok (${data.device || '?'})` : 'api error';
+      } catch (e) {
+        $('healthBadge').className = 'badge err';
+        $('healthBadge').textContent = 'api offline';
+      }
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function setSendEnabled(enabled) {
+      const on = Boolean(enabled && selectedFile);
+      $('pushDetectBtn').disabled = !on;
+      $('pushDetectExitBtn').disabled = !on;
+      $('detectBtn').disabled = !selectedFile;
+    }
+
+    function onFile(input) {
+      selectedFile = input.files[0] || null;
+      lastDetection = null;
+      const img = $('preview');
+      const countdown = $('recognizeCountdown');
+      countdown.style.display = 'none';
+      if (selectedFile) {
+        img.src = URL.createObjectURL(selectedFile);
+        img.style.display = 'block';
+        $('detectMeta').textContent =
+          `${selectedFile.name} (${Math.round(selectedFile.size / 1024)} KB) · ready to send`;
+        $('detectOut').textContent =
+          'Ready. Press Send → Entry/Exit (5s recognize), or POST /detect only.';
+        setSendEnabled(true);
+      } else {
+        img.style.display = 'none';
+        img.removeAttribute('src');
+        $('detectMeta').textContent = 'Select a plate photo.';
+        $('detectOut').textContent = '—';
+        setSendEnabled(false);
+      }
+    }
+
+    /** Shared POST /detect. Returns { ok, status, data, ms } or throws. */
+    async function runDetectInternal(cam) {
+      if (!selectedFile) {
+        throw new Error('No image selected');
+      }
+      const fd = new FormData();
+      fd.append('image', selectedFile);
+      const camId = encodeURIComponent(cam || cameraId() || 'entry_camera');
+      const t0 = performance.now();
+      const r = await fetch(`${base()}/detect?camera_id=${camId}`, {
+        method: 'POST',
+        body: fd,
+      });
+      const data = await r.json();
+      const ms = Math.round(performance.now() - t0);
+      return { ok: r.ok, status: r.status, data, ms };
+    }
+
+    async function runDetect() {
+      if (!selectedFile) return;
+      setSendEnabled(false);
+      $('detectBtn').disabled = true;
+      $('detectOut').textContent = 'Detecting…';
+      try {
+        const { status, data, ms } = await runDetectInternal();
+        $('detectOut').textContent = JSON.stringify(data, null, 2);
+        if (data.success && data.plate) {
+          lastDetection = data;
+          showPlate(data.plate, null);
+          $('detectMeta').innerHTML =
+            `<strong>${ms} ms</strong> · HTTP ${status} · plate <strong>${data.plate}</strong>`;
+          log(`detect OK [${ms} ms]: ${data.plate}`);
+        } else {
+          lastDetection = null;
+          const reviewNote = data.fail_captured
+            ? ` · saved for review (${data.fail_capture_id || '?'})`
+            : '';
+          $('detectMeta').innerHTML =
+            `<strong>${ms} ms</strong> · HTTP ${status} · <strong>no valid plate</strong>` +
+            (data.message ? ` · ${data.message}` : '') +
+            reviewNote;
+          log(`detect FAIL [${ms} ms]: ${data.message || JSON.stringify(data)}`);
+          if (data.fail_captured) {
+            log(`fail captured for review id=${data.fail_capture_id}`);
+          }
+        }
+      } catch (e) {
+        $('detectOut').textContent = String(e);
+        lastDetection = null;
+        $('detectMeta').textContent = `Detect error: ${e}`;
+        log(`detect ERROR: ${e}`);
+      } finally {
+        setSendEnabled(true);
+      }
+    }
+
+    /**
+     * Primary path: show preview for 5s while POST /detect runs,
+     * then inject plate_detected to Flutter only on success.
+     */
+    async function sendPhotoToRecognition(cam) {
+      if (!selectedFile) {
+        alert('Choose an image first');
+        return;
+      }
+      const targetCam = cam || cameraId();
+      if (targetCam) $('cameraId').value = targetCam;
+      ensureWs();
+
+      setSendEnabled(false);
+      $('detectBtn').disabled = true;
+
+      const img = $('preview');
+      img.style.display = 'block';
+      const countdown = $('recognizeCountdown');
+      countdown.style.display = 'inline-block';
+
+      let remaining = 5;
+      countdown.textContent = `Recognizing… ${remaining}s`;
+      $('detectMeta').textContent =
+        `Holding photo for ${remaining}s · detecting for ${targetCam}…`;
+      $('detectOut').textContent = 'Recognition in progress…';
+      log(`→ send photo to recognition [${targetCam}] (5s hold)`);
+
+      const tick = setInterval(() => {
+        remaining -= 1;
+        if (remaining > 0) {
+          countdown.textContent = `Recognizing… ${remaining}s`;
+          $('detectMeta').textContent =
+            `Holding photo for ${remaining}s · detecting for ${targetCam}…`;
+        }
+      }, 1000);
+
+      let detectResult = null;
+      let detectError = null;
+      try {
+        const [result] = await Promise.all([
+          runDetectInternal(targetCam).catch((e) => {
+            detectError = e;
+            return null;
+          }),
+          sleep(5000),
+        ]);
+        detectResult = result;
+      } finally {
+        clearInterval(tick);
+        countdown.style.display = 'none';
+      }
+
+      try {
+        if (detectError) {
+          lastDetection = null;
+          $('detectOut').textContent = String(detectError);
+          $('detectMeta').textContent = `Recognition failed: ${detectError}`;
+          log(`detect ERROR: ${detectError}`);
+          return;
+        }
+
+        const { status, data, ms } = detectResult;
+        $('detectOut').textContent = JSON.stringify(data, null, 2);
+
+        if (data.success && data.plate) {
+          lastDetection = data;
+          showPlate(data.plate, null);
+          $('detectMeta').innerHTML =
+            `<strong>${ms} ms</strong> · HTTP ${status} · plate <strong>${data.plate}</strong> · injecting…`;
+          log(`detect OK [${ms} ms]: ${data.plate} → inject ${targetCam}`);
+          await injectPlate(data.plate, data.confidence || 0.9, targetCam);
+          $('detectMeta').innerHTML =
+            `<strong>${ms} ms</strong> · plate <strong>${data.plate}</strong> · sent to Flutter (${targetCam})`;
+        } else {
+          lastDetection = null;
+          const reason = data.message || 'No valid Iranian plate from OCR';
+          const reviewNote = data.fail_captured
+            ? ` · <strong>saved for review</strong> (${data.fail_capture_id || '?'})`
+            : '';
+          $('detectMeta').innerHTML =
+            `<strong>${ms} ms</strong> · HTTP ${status} · <strong>not injected</strong> · ${reason}${reviewNote}`;
+          log(`detect FAIL [${ms} ms] — not injected: ${reason}`);
+          if (data.fail_captured) {
+            log(
+              `fail captured → operator review panel (${data.fail_type || '?'}) ` +
+              `id=${data.fail_capture_id}`,
+            );
+          }
+        }
+      } finally {
+        setSendEnabled(true);
+      }
+    }
+
+    async function sendManual(cam) {
+      const plate = $('manualPlate').value.trim();
+      if (!plate) {
+        alert('Enter a plate first');
+        return;
+      }
+      await injectPlate(plate, 0.95, cam);
+    }
+
+    async function injectPlate(plate, confidence, cam) {
+      const targetCam = cam || cameraId();
+      if (targetCam) $('cameraId').value = targetCam;
+      ensureWs();
+      try {
+        const r = await fetch(`${base()}/test/inject-plate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            plate,
+            camera_id: targetCam,
+            confidence,
+            char_confidence: confidence,
+          }),
+        });
+        const data = await r.json();
+        $('injectOut').textContent = JSON.stringify(data, null, 2);
+        if (!r.ok) {
+          showPlate('INVALID', null);
+          log(`inject ERROR: ${data.detail || JSON.stringify(data)}`);
+          return;
+        }
+        showPlate(data.plate_number, data.plate_canonical);
+        log(
+          `→ inject ${data.camera_id} ${data.plate_number} (${data.plate_canonical}) ` +
+          `clients=${data.clients}`,
+        );
+      } catch (e) {
+        $('injectOut').textContent = String(e);
+        log(`inject ERROR: ${e}`);
+      }
+    }
+
+    async function sendRandom(kind, cam) {
+      const targetCam = cam || cameraId();
+      if (targetCam) $('cameraId').value = targetCam;
+      ensureWs();
+      const body = {
+        kind,
+        camera_id: targetCam,
+        confidence: 0.95,
+      };
+      const zone = $('freeZone').value;
+      if (kind === 'free_zone' && zone) body.free_zone = zone;
+      try {
+        const r = await fetch(`${base()}/test/random-plate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        $('injectOut').textContent = JSON.stringify(data, null, 2);
+        if (!r.ok) {
+          log(`random ERROR: ${data.detail || JSON.stringify(data)}`);
+          return;
+        }
+        showPlate(data.plate_number, data.plate_canonical);
+        const fz = data.free_zone ? ` zone=${data.free_zone}` : '';
+        log(
+          `→ random ${data.kind}${fz} [${data.camera_id}] ` +
+          `${data.plate_number} (${data.plate_canonical}) clients=${data.clients}`,
+        );
+      } catch (e) {
+        $('injectOut').textContent = String(e);
+        log(`random ERROR: ${e}`);
+      }
+    }
+
+    function ensureWs() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) wsConnect();
+    }
+
+    function wsConnect() {
+      if (ws && ws.readyState === WebSocket.OPEN) return;
+      if (ws) wsDisconnect();
+      const url = wsUrl();
+      log(`Connecting ${url}`);
+      ws = new WebSocket(url);
+      ws.onopen = () => {
+        $('wsBadge').className = 'badge ok';
+        $('wsBadge').textContent = 'ws connected';
+        $('wsConnectBtn').disabled = true;
+        $('wsDisconnectBtn').disabled = false;
+        log('OPEN');
+      };
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === 'plate_detected' && msg.data) {
+            const d = msg.data;
+            log(
+              `★ VALID [${d.camera_id}] ${d.plate_number}` +
+              (d.plate_canonical ? ` (${d.plate_canonical})` : '') +
+              (d.source ? ` src=${d.source}` : ''),
+            );
+            return;
+          }
+          if (msg.type === 'plate_rejected' && msg.data) {
+            log(`✗ REJECTED [${msg.data.camera_id}] ${msg.data.raw_ocr}`);
+            return;
+          }
+          log(`← ${ev.data}`);
+        } catch (_) {
+          log(`← ${ev.data}`);
+        }
+      };
+      ws.onerror = () => log('ERROR');
+      ws.onclose = () => {
+        $('wsBadge').className = 'badge wait';
+        $('wsBadge').textContent = 'ws disconnected';
+        $('wsConnectBtn').disabled = false;
+        $('wsDisconnectBtn').disabled = true;
+        log('CLOSED');
+        ws = null;
+      };
+    }
+
+    function wsDisconnect() {
+      if (ws) ws.close();
+    }
+
+    function wsPing() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        alert('Connect WebSocket first');
+        return;
+      }
+      ws.send(JSON.stringify({ type: 'ping' }));
+      log('→ ping');
+    }
+
+    $('baseUrl').value = window.location.origin;
+    loadMeta();
+    checkHealth();
+    wsConnect();
+  </script>
+</body>
+</html>

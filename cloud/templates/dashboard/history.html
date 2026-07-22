@@ -1,0 +1,56 @@
+{% extends "dashboard/base.html" %}
+{% load jalali_tags static %}
+{% block title %}تاریخچه | Parkinox Cloud{% endblock %}
+{% block content %}
+<div class="topbar"><div><h1>تاریخچه پارکینگ</h1><div class="muted">{% if site %}{{ site.site_id }}{% endif %}</div></div></div>
+<div class="panel">
+  <form class="filters" method="get">
+    {% include "dashboard/_plate_input.html" with plate_value=params.plate %}
+    <input class="jalali-date-input" name="from" placeholder="از تاریخ ۱۴۰۴/۰۱/۰۱" value="{{ params.from }}" title="تاریخ شمسی yyyy/MM/dd">
+    <input class="jalali-date-input" name="to" placeholder="تا تاریخ ۱۴۰۴/۰۱/۳۱" value="{{ params.to }}" title="تاریخ شمسی yyyy/MM/dd">
+    <input name="gate" placeholder="دوربین/گیت" value="{{ params.gate }}">
+    <select name="status">
+      <option value="">وضعیت</option>
+      <option value="parked" {% if params.status == 'parked' %}selected{% endif %}>پارک‌شده</option>
+      <option value="completed" {% if params.status == 'completed' %}selected{% endif %}>تکمیل</option>
+      <option value="unpaid" {% if params.status == 'unpaid' %}selected{% endif %}>پرداخت‌نشده</option>
+      <option value="waived" {% if params.status == 'waived' %}selected{% endif %}>بخشوده</option>
+    </select>
+    <select name="payment">
+      <option value="">پرداخت</option>
+      <option value="wallet" {% if params.payment == 'wallet' %}selected{% endif %}>کیف پول</option>
+      <option value="cash" {% if params.payment == 'cash' %}selected{% endif %}>نقد</option>
+      <option value="waived" {% if params.payment == 'waived' %}selected{% endif %}>بخشوده</option>
+    </select>
+    <input name="min_duration" placeholder="حداقل مدت" value="{{ params.min_duration }}" style="width:7rem">
+    <input name="max_duration" placeholder="حداکثر مدت" value="{{ params.max_duration }}" style="width:7rem">
+    <button type="submit">اعمال فیلتر</button>
+  </form>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>ورود</th><th>خروج</th><th>پلاک</th><th>زمان ورود</th><th>زمان خروج</th>
+        <th>مدت</th><th>هزینه</th><th>پرداخت</th><th>وضعیت</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in sessions %}
+      <tr>
+        <td>{% if s.thumb_media_id %}<img class="thumb" src="/files/{{ s.thumb_media_id }}/" alt="">{% else %}<span class="badge pending">—</span>{% endif %}</td>
+        <td>{% if s.exit_thumb_media_id %}<img class="thumb" src="/files/{{ s.exit_thumb_media_id }}/" alt="">{% else %}<span class="badge pending">—</span>{% endif %}</td>
+        <td>{{ s.plate_number }}</td>
+        <td>{{ s.entry_time|jalali:'time' }}</td>
+        <td>{{ s.exit_time|jalali:'time' }}</td>
+        <td>{{ s.duration_minutes|default:"—" }}</td>
+        <td>{{ s.fee_charged }}</td>
+        <td>{{ s.payment_method|default:"—" }}</td>
+        <td><span class="badge">{{ s.status }}</span></td>
+        <td><a href="/sessions/{{ s.session_uuid }}/">جزئیات</a></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="10">موردی یافت نشد.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

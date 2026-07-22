@@ -6,12 +6,18 @@ import sys
 import re
 import logging
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 import cv2
 import numpy as np
 import torch
 
+from plate_validator import validate_detection_plate, to_operator_display
+
 logger = logging.getLogger(__name__)
+
+# Downscale large RTSP frames before YOLO — main stream (101) is often 1080p+.
+MAX_INFERENCE_EDGE = 1280
+CHAR_PLATE_SIZE = (320, 80)
 
 # Add yolov5 to path
 YOLOV5_PATH = Path(__file__).parent.parent / "yolov5"
@@ -94,6 +100,8 @@ class PlateDetector:
             )
             self.plate_model.to(self.device)
             self.plate_model.eval()
+            if self.device == "cuda":
+                self.plate_model.half()
             logger.info("✓ Plate model loaded")
             
             logger.info(f"Loading character recognition model from: {self.char_model_path}")
@@ -105,6 +113,8 @@ class PlateDetector:
             )
             self.char_model.to(self.device)
             self.char_model.eval()
+            if self.device == "cuda":
+                self.char_model.half()
             logger.info("✓ Character model loaded")
             
         except Exception as e:
@@ -156,6 +166,40 @@ class PlateDetector:
         
         return s
     
+    @staticmethod
+    def _prepare_inference_frame(image: np.ndarray) -> tuple[np.ndarray, float]:
+        """Resize oversized frames and return (frame, scale) for bbox remap."""
+        h, w = image.shape[:2]
+        longest = max(h, w)
+        if longest <= MAX_INFERENCE_EDGE:
+            return image, 1.0
+        scale = MAX_INFERENCE_EDGE / float(longest)
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        return resized, scale
+
+    @staticmethod
+    def _scale_bbox(bbox: list[int], scale: float) -> list[int]:
+        if scale == 1.0:
+            return bbox
+        inv = 1.0 / scale
+        return [int(v * inv) for v in bbox]
+
+    def _run_plate_model(self, image: np.ndarray):
+        if self.device == "cuda":
+            with torch.inference_mode(), torch.amp.autocast("cuda"):
+                return self.plate_model(image)
+        with torch.inference_mode():
+            return self.plate_model(image)
+
+    def _run_char_model(self, plate_resized: np.ndarray):
+        if self.device == "cuda":
+            with torch.inference_mode(), torch.amp.autocast("cuda"):
+                return self.char_model(plate_resized)
+        with torch.inference_mode():
+            return self.char_model(plate_resized)
+    
     def _decode_plate(self, plate_crop: np.ndarray) -> Tuple[str, float]:
         """
         Detect and decode characters in cropped plate image.
@@ -167,10 +211,10 @@ class PlateDetector:
             Tuple of (formatted_plate_text, average_confidence)
         """
         # Resize plate to standard size (from legacy code)
-        plate_resized = cv2.resize(plate_crop, (320, 80))
+        plate_resized = cv2.resize(plate_crop, CHAR_PLATE_SIZE)
         
         # Detect characters
-        results = self.char_model(plate_resized)
+        results = self._run_char_model(plate_resized)
         detections = results.xyxy[0].cpu().numpy()
         
         if len(detections) == 0:
@@ -197,6 +241,33 @@ class PlateDetector:
         formatted = self.format_plate(raw_text)
         
         return formatted, avg_conf
+    
+    def _finalize_detection(
+        self,
+        formatted: str,
+        conf: float,
+        char_conf: float,
+        bbox: list[int],
+    ) -> Tuple[Optional[str], float, Optional[dict]]:
+        """Apply Django plate rules; reject invalid OCR immediately."""
+        canonical, err = validate_detection_plate(formatted)
+        if not canonical:
+            logger.info("Rejected invalid plate OCR %r: %s", formatted, err)
+            return None, float(conf), {
+                "rejected": True,
+                "raw_ocr": formatted,
+                "validation_error": err,
+                "char_confidence": char_conf,
+                "bbox": bbox,
+            }
+
+        display = to_operator_display(canonical)
+        return display, float(conf), {
+            "plate_canonical": canonical,
+            "char_confidence": char_conf,
+            "bbox": bbox,
+            "raw_text": formatted,
+        }
     
     def detect(
         self,
@@ -227,10 +298,11 @@ class PlateDetector:
             logger.error("Invalid image")
             return None, 0.0, None
         
+        infer_image, scale = self._prepare_inference_frame(image)
         h, w = image.shape[:2]
         
         # Step 1: Detect plate regions
-        results = self.plate_model(image)
+        results = self._run_plate_model(infer_image)
         detections = results.xyxy[0].cpu().numpy()
         
         if len(detections) == 0:
@@ -247,6 +319,8 @@ class PlateDetector:
                 continue
             
             x1, y1, x2, y2 = map(int, xyxy)
+            if scale != 1.0:
+                x1, y1, x2, y2 = self._scale_bbox([x1, y1, x2, y2], scale)
             
             # Crop plate region with padding
             pad = 10
@@ -264,31 +338,79 @@ class PlateDetector:
             plate_text, char_conf = self._decode_plate(plate_crop)
             
             if not plate_text:
+                # Type B observability only — does not change YOLO/validation.
+                # Prefer a valid/rejected OCR candidate over empty OCR when ranking.
+                empty_meta = {
+                    "plate": None,
+                    "confidence": float(conf),
+                    "char_confidence": float(char_conf),
+                    "bbox": [x1, y1, x2, y2],
+                    "raw_text": "",
+                    "raw_ocr": "",
+                    "fail_type": "ocr_empty",
+                    "rejected": False,
+                }
+                if best_result is None or (
+                    best_result.get("fail_type") == "ocr_empty"
+                    and conf > best_conf
+                ):
+                    best_conf = float(conf)
+                    best_result = empty_meta
                 continue
             
+            finalized = self._finalize_detection(
+                plate_text, float(conf), char_conf, [x1, y1, x2, y2]
+            )
+            plate_out, conf_out, meta = finalized
+            
+            if meta and meta.get("rejected"):
+                # Keep best rejected candidate for retry signalling upstream.
+                if conf > best_conf or (
+                    best_result is not None
+                    and best_result.get("fail_type") == "ocr_empty"
+                ):
+                    best_conf = conf
+                    best_result = {
+                        "plate": None,
+                        "confidence": conf_out,
+                        "char_confidence": char_conf,
+                        "bbox": [x1, y1, x2, y2],
+                        "raw_text": plate_text,
+                        "fail_type": "ocr_invalid_format",
+                        **meta,
+                    }
+                continue
+
             result = {
-                'plate': plate_text,
-                'confidence': float(conf),
-                'char_confidence': char_conf,
-                'bbox': [x1, y1, x2, y2],
-                'raw_text': plate_text,
+                "plate": plate_out,
+                "confidence": conf_out,
+                "char_confidence": char_conf,
+                "bbox": [x1, y1, x2, y2],
+                "raw_text": plate_text,
+                **(meta or {}),
             }
             
             all_results.append(result)
             
             # Track best result
-            if conf > best_conf:
-                best_conf = conf
+            if conf_out > best_conf:
+                best_conf = conf_out
                 best_result = result
         
         if return_all:
             return all_results
         
         if best_result:
+            if best_result.get("rejected") or best_result.get("fail_type") == "ocr_empty":
+                return (
+                    None,
+                    best_result["confidence"],
+                    best_result,
+                )
             return (
-                best_result['plate'],
-                best_result['confidence'],
-                best_result
+                best_result["plate"],
+                best_result["confidence"],
+                best_result,
             )
         
         return None, 0.0, None

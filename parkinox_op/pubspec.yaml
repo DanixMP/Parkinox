@@ -33,7 +33,7 @@ dependencies:
   camera: ^0.11.0+2            # Camera access for plate capture
   camera_windows: ^0.2.3       # Windows camera support
   image_picker: ^1.1.2         # Image selection from gallery
-  media_kit: ^1.2.6            # RTSP / HTTP stream preview for IP cameras
+  media_kit: ^1.2.6            # Hardware-decoded RTSP preview for IP cameras
   media_kit_video: ^2.0.1
   media_kit_libs_windows_video: ^1.0.11
 

@@ -5,13 +5,28 @@ Modern API bridge between Flutter UI and YOLOv5 Core
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 import io
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, status, WebSocket, WebSocketDisconnect
+# FFmpeg RTSP options must be set before OpenCV loads its FFmpeg backend.
+# err_detect;ignore_err recovers from minor H.264 bitstream glitches common on IP cameras.
+os.environ.setdefault(
+    "OPENCV_FFMPEG_CAPTURE_OPTIONS",
+    (
+        "rtsp_transport;tcp|"
+        "fflags;nobuffer|"
+        "flags;low_delay|"
+        "max_delay;0|"
+        "reorder_queue_size;0|"
+        "err_detect;ignore_err"
+    ),
+)
+
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
 import cv2
 import numpy as np
@@ -19,6 +34,22 @@ import uvicorn
 
 from plate_detector import PlateDetector
 from camera_stream_service import CameraManager
+from fail_capture import (
+    FAIL_TYPE_OCR_EMPTY,
+    FAIL_TYPE_OCR_INVALID,
+    FailCaptureStore,
+    django_ingest_callback_factory,
+    get_fail_capture_store,
+)
+from fail_metrics import fail_metrics
+from test_plate_tools import (
+    CAMERA_IDS,
+    FREE_ZONES,
+    build_plate_detected_payload,
+    make_random_payload,
+    normalize_to_standard,
+)
+import fail_capture as fail_capture_mod
 
 # Configure logging
 logging.basicConfig(
@@ -60,6 +91,61 @@ class DetectionResponse(BaseModel):
     num_characters: int = 0
     bbox: list[int] = Field(default_factory=list)
     message: Optional[str] = None
+    fail_captured: bool = False
+    fail_capture_id: Optional[str] = None
+    fail_type: Optional[str] = None
+
+
+def _capture_upload_detection_fail(
+    img: np.ndarray,
+    confidence: float,
+    metadata: Optional[dict],
+    camera_id: str = "entry_camera",
+) -> tuple[bool, Optional[str], Optional[str]]:
+    """
+    Persist Type A/B fails from POST /detect into FailCaptureStore (immediate write).
+
+    Returns (captured, capture_id, fail_type).
+    """
+    if img is None or metadata is None:
+        return False, None, None
+
+    store = get_fail_capture_store()
+    cam = (camera_id or "entry_camera").strip() or "entry_camera"
+    bbox = metadata.get("bbox")
+
+    if metadata.get("rejected") or metadata.get("fail_type") == FAIL_TYPE_OCR_INVALID:
+        out = store.submit(
+            fail_type=FAIL_TYPE_OCR_INVALID,
+            frame=img,
+            camera_id=cam,
+            raw_ocr=metadata.get("raw_ocr") or metadata.get("raw_text"),
+            validation_error=metadata.get("validation_error"),
+            plate_confidence=float(confidence or 0.0),
+            char_confidence=float(metadata.get("char_confidence") or 0.0),
+            bbox=bbox,
+            immediate=True,
+        )
+        capture_id = out.name if out is not None else None
+        return out is not None, capture_id, FAIL_TYPE_OCR_INVALID
+
+    if metadata.get("fail_type") == FAIL_TYPE_OCR_EMPTY:
+        out = store.submit(
+            fail_type=FAIL_TYPE_OCR_EMPTY,
+            frame=img,
+            camera_id=cam,
+            raw_ocr=metadata.get("raw_ocr") or "",
+            validation_error=metadata.get("validation_error")
+            or "Empty or below-threshold OCR",
+            plate_confidence=float(confidence or 0.0),
+            char_confidence=float(metadata.get("char_confidence") or 0.0),
+            bbox=bbox,
+            immediate=True,
+        )
+        capture_id = out.name if out is not None else None
+        return out is not None, capture_id, FAIL_TYPE_OCR_EMPTY
+
+    return False, None, None
 
 
 class HealthResponse(BaseModel):
@@ -90,6 +176,54 @@ class ErrorResponse(BaseModel):
     detail: Optional[str] = None
 
 
+class InjectPlateRequest(BaseModel):
+    """Inject a validated plate_detected event for Flutter testing."""
+    plate: str = Field(..., description="Any accepted Iranian plate format")
+    camera_id: str = Field(
+        "entry_camera",
+        description="entry_camera or exit_camera",
+    )
+    confidence: float = Field(0.95, ge=0.0, le=1.0)
+    char_confidence: float = Field(0.92, ge=0.0, le=1.0)
+
+
+class RandomPlateRequest(BaseModel):
+    """Generate a random valid national or free-zone plate and push to Flutter."""
+    kind: str = Field(
+        "national",
+        description="national or free_zone",
+    )
+    camera_id: str = Field("entry_camera")
+    free_zone: Optional[str] = Field(
+        None,
+        description="Optional free-zone name when kind=free_zone",
+    )
+    confidence: float = Field(0.95, ge=0.0, le=1.0)
+
+
+class InjectPlateResponse(BaseModel):
+    success: bool
+    plate_number: Optional[str] = None
+    plate_canonical: Optional[str] = None
+    camera_id: Optional[str] = None
+    kind: Optional[str] = None
+    free_zone: Optional[str] = None
+    payload: Optional[dict] = None
+    message: Optional[str] = None
+    clients: int = 0
+
+
+class SuccessCaptureFinalizeRequest(BaseModel):
+    event_uuid: str
+    camera_id: str
+    plate: Optional[str] = ""
+    direction: Optional[str] = "entry"
+    confidence: Optional[float] = None
+    detection_event_id: Optional[str] = None
+    session_uuid: Optional[str] = None
+    gate_event_id: Optional[int] = None
+
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize detector on startup"""
@@ -100,9 +234,13 @@ async def startup_event():
         logger.info("="*60)
         logger.info("Initializing plate detector...")
         detector = PlateDetector()
+        fail_capture_mod.fail_capture_store = FailCaptureStore(
+            ingest_callback=django_ingest_callback_factory()
+        )
         camera_manager = CameraManager(detector)
         camera_manager.set_event_loop(asyncio.get_running_loop())
         logger.info(f"✓ Plate detector initialized on device: {detector.device}")
+        logger.info("✓ Fail capture store ready")
         logger.info("✓ FastAPI server ready")
     except Exception as e:
         logger.error(f"Failed to initialize detector: {e}", exc_info=True)
@@ -117,6 +255,24 @@ async def shutdown_event():
         camera_manager.shutdown()
 
 
+@app.get("/debug", tags=["General"], include_in_schema=False)
+async def debug_ui():
+    """Simple web UI for testing detection without Flutter."""
+    path = Path(__file__).parent / "debug_ui.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="debug_ui.html not found")
+    return FileResponse(path, media_type="text/html")
+
+
+@app.get("/test", tags=["General"], include_in_schema=False)
+async def test_ui():
+    """HTML tester: upload detect + random plate inject to Flutter WebSocket."""
+    path = Path(__file__).parent / "test_ui.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="test_ui.html not found")
+    return FileResponse(path, media_type="text/html")
+
+
 @app.get("/", tags=["General"])
 async def root():
     """Root endpoint with API information"""
@@ -125,7 +281,9 @@ async def root():
         "version": "1.0.0",
         "status": "running",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
+        "debug_ui": "/debug",
+        "test_ui": "/test",
     }
 
 
@@ -145,7 +303,11 @@ async def health_check():
 
 @app.post("/detect", response_model=DetectionResponse, tags=["Detection"])
 async def detect_plate(
-    image: UploadFile = File(..., description="Image file containing license plate")
+    image: UploadFile = File(..., description="Image file containing license plate"),
+    camera_id: str = Query(
+        "entry_camera",
+        description="Camera id for fail-capture / review (entry_camera or exit_camera)",
+    ),
 ):
     """
     Detect Iranian license plate from uploaded image
@@ -157,6 +319,9 @@ async def detect_plate(
     2. Recognizes characters using CharsYolo model
     3. Formats plate text to standard Iranian format
     
+    On invalid/empty OCR (Type A/B), the frame is saved via FailCaptureStore
+    and ingested to Django for the operator review panel.
+    
     **Returns:**
     - `success`: Detection status
     - `plate`: Formatted plate text (e.g., "۱۲ ب ۳۴۵ ۶۷")
@@ -164,6 +329,7 @@ async def detect_plate(
     - `char_confidence`: Character recognition confidence (0-1)
     - `num_characters`: Number of detected characters
     - `bbox`: Bounding box coordinates [x1, y1, x2, y2]
+    - `fail_captured` / `fail_capture_id`: set when a fail was archived for review
     """
     if detector is None:
         raise HTTPException(
@@ -173,7 +339,7 @@ async def detect_plate(
     
     try:
         # Validate file type
-        if not image.content_type.startswith('image/'):
+        if not image.content_type or not image.content_type.startswith('image/'):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid file type: {image.content_type}. Expected image file."
@@ -194,8 +360,65 @@ async def detect_plate(
         
         # Detect plate
         plate_text, confidence, metadata = detector.detect(img)
-        
+
+        # Type A: invalid format — capture for operator review
+        if metadata and metadata.get("rejected"):
+            captured, capture_id, fail_type = _capture_upload_detection_fail(
+                img, confidence, metadata, camera_id=camera_id
+            )
+            msg = (
+                f"OCR rejected — invalid Iranian plate format: "
+                f"{metadata.get('validation_error', 'unknown')}"
+            )
+            if captured:
+                msg += f" · saved for review ({capture_id})"
+            return DetectionResponse(
+                success=False,
+                confidence=round(confidence, 3),
+                char_confidence=round(metadata.get("char_confidence", 0), 3),
+                bbox=metadata.get("bbox", []) or [],
+                message=msg,
+                fail_captured=captured,
+                fail_capture_id=capture_id,
+                fail_type=fail_type,
+            )
+
+        # Type B: empty OCR with bbox — capture for operator review
+        if metadata and metadata.get("fail_type") == FAIL_TYPE_OCR_EMPTY:
+            captured, capture_id, fail_type = _capture_upload_detection_fail(
+                img, confidence, metadata, camera_id=camera_id
+            )
+            msg = "OCR empty / below threshold"
+            if captured:
+                msg += f" · saved for review ({capture_id})"
+            return DetectionResponse(
+                success=False,
+                confidence=round(float(confidence or 0.0), 3),
+                char_confidence=round(
+                    float(metadata.get("char_confidence") or 0.0), 3
+                ),
+                bbox=metadata.get("bbox", []) or [],
+                message=msg,
+                fail_captured=captured,
+                fail_capture_id=capture_id,
+                fail_type=fail_type,
+            )
+
         if plate_text:
+            try:
+                from success_capture import get_success_capture_store
+                import uuid as _uuid
+
+                get_success_capture_store().buffer_detection(
+                    detection_event_id=str(_uuid.uuid4()),
+                    camera_id=camera_id or "entry_camera",
+                    plate=plate_text,
+                    confidence=float(confidence or 0.0),
+                    frame=img,
+                    bbox=(metadata or {}).get("bbox"),
+                )
+            except Exception:
+                logger.debug("success buffer on /detect skipped", exc_info=True)
             response = DetectionResponse(
                 success=True,
                 plate=plate_text,
@@ -262,10 +485,47 @@ async def detect_plate_from_file(request: FilePathRequest):
             )
         
         logger.info(f"Processing file: {image_path}")
-        
-        # Detect plate
-        plate_text, confidence, metadata = detector.detect_from_file(str(image_path))
-        
+
+        img = cv2.imread(str(image_path))
+        plate_text, confidence, metadata = detector.detect(
+            img if img is not None else str(image_path)
+        )
+
+        if metadata and (
+            metadata.get("rejected")
+            or metadata.get("fail_type") == FAIL_TYPE_OCR_EMPTY
+        ):
+            frame = img if img is not None else cv2.imread(str(image_path))
+            captured, capture_id, fail_type = False, None, None
+            if frame is not None:
+                captured, capture_id, fail_type = _capture_upload_detection_fail(
+                    frame,
+                    confidence,
+                    metadata,
+                    camera_id="entry_camera",
+                )
+            if metadata.get("rejected"):
+                msg = (
+                    f"OCR rejected — invalid Iranian plate format: "
+                    f"{metadata.get('validation_error', 'unknown')}"
+                )
+            else:
+                msg = "OCR empty / below threshold"
+            if captured:
+                msg += f" · saved for review ({capture_id})"
+            return DetectionResponse(
+                success=False,
+                confidence=round(float(confidence or 0.0), 3),
+                char_confidence=round(
+                    float(metadata.get("char_confidence") or 0.0), 3
+                ),
+                bbox=metadata.get("bbox", []) or [],
+                message=msg,
+                fail_captured=captured,
+                fail_capture_id=capture_id,
+                fail_type=fail_type,
+            )
+
         if plate_text:
             response = DetectionResponse(
                 success=True,
@@ -347,22 +607,49 @@ async def get_camera_status():
     return camera_manager.status()
 
 
+@app.post("/success-capture/finalize", tags=["SuccessCapture"])
+async def success_capture_finalize(body: SuccessCaptureFinalizeRequest):
+    """
+    Finalize buffered success frames into parking_media/<date>/<event_uuid>/.
+
+    Called fire-and-forget from Django after gate confirm. Safe if buffer missed.
+    """
+    from success_capture import get_success_capture_store
+
+    store = get_success_capture_store()
+    meta = await asyncio.to_thread(
+        store.finalize,
+        event_uuid=body.event_uuid,
+        camera_id=body.camera_id,
+        plate=body.plate or "",
+        direction=body.direction or "entry",
+        confidence=body.confidence,
+        detection_event_id=body.detection_event_id,
+        session_uuid=body.session_uuid,
+        gate_event_id=body.gate_event_id,
+    )
+    return {"success": True, "meta": meta}
+
+
 async def _mjpeg_generator(slot: str):
     boundary = b"--frame"
     if camera_manager is None:
         return
 
     stream = camera_manager.stream_for(slot)
+    last_sent: Optional[bytes] = None
+    target_interval_sec = 1.0 / 15.0
     while stream.enabled:
-        jpeg = stream.get_latest_jpeg()
-        if jpeg:
+        jpeg = stream.get_latest_preview_jpeg()
+        if jpeg and jpeg != last_sent:
             yield (
                 boundary
                 + b"\r\nContent-Type: image/jpeg\r\n\r\n"
                 + jpeg
                 + b"\r\n"
             )
-        await asyncio.sleep(0.05)
+            last_sent = jpeg
+        await asyncio.sleep(target_interval_sec)
 
 
 @app.get("/cameras/{slot}/mjpeg", tags=["Cameras"])
@@ -384,6 +671,153 @@ async def camera_mjpeg(slot: str):
         _mjpeg_generator(slot),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
+
+
+@app.post("/cameras/{slot}/capture-miss", tags=["Cameras"])
+async def capture_operator_miss(slot: str):
+    """
+    Type C: operator reports a visible plate that was not detected (no bbox).
+    Saves the latest camera frame under data_fails/ for review/training.
+    """
+    if slot not in ("entry", "exit"):
+        raise HTTPException(status_code=404, detail="Unknown camera slot")
+    if camera_manager is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Camera manager not initialized",
+        )
+    result = camera_manager.capture_miss(slot)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No camera frame available to capture",
+        )
+    return {"success": True, **result}
+
+
+@app.get("/metrics/detection-fails", tags=["Metrics"])
+async def detection_fail_metrics():
+    """In-process counters for fail-capture observability."""
+    return {"success": True, "metrics": fail_metrics.snapshot()}
+
+
+@app.post(
+    "/test/inject-plate",
+    response_model=InjectPlateResponse,
+    tags=["Test"],
+)
+async def inject_plate(req: InjectPlateRequest):
+    """
+    Validate an Iranian plate into standard display/canonical form and broadcast
+    a ``plate_detected`` WebSocket event so Flutter can exercise the approval UI.
+    """
+    if camera_manager is None:
+        raise HTTPException(status_code=503, detail="Camera manager not ready")
+    if req.camera_id not in CAMERA_IDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"camera_id must be one of {list(CAMERA_IDS)}",
+        )
+    try:
+        display, canonical = normalize_to_standard(req.plate)
+        payload = build_plate_detected_payload(
+            plate_display=display,
+            plate_canonical=canonical,
+            camera_id=req.camera_id,
+            confidence=req.confidence,
+            char_confidence=req.char_confidence,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    camera_manager.inject_plate_detected(payload)
+    clients = len(getattr(camera_manager, "_ws_clients", set()))
+    logger.info(
+        "Test inject [%s] %s (%s) → %s WS client(s)",
+        req.camera_id,
+        display,
+        canonical,
+        clients,
+    )
+    return InjectPlateResponse(
+        success=True,
+        plate_number=display,
+        plate_canonical=canonical,
+        camera_id=req.camera_id,
+        payload=payload,
+        message="plate_detected broadcast",
+        clients=clients,
+    )
+
+
+@app.post(
+    "/test/random-plate",
+    response_model=InjectPlateResponse,
+    tags=["Test"],
+)
+async def random_plate(req: RandomPlateRequest):
+    """
+    Generate a random valid national or free-zone plate (Django standards),
+    then push ``plate_detected`` to all WebSocket clients (Flutter).
+    """
+    if camera_manager is None:
+        raise HTTPException(status_code=503, detail="Camera manager not ready")
+    if req.camera_id not in CAMERA_IDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"camera_id must be one of {list(CAMERA_IDS)}",
+        )
+    kind = (req.kind or "national").strip().lower()
+    if kind not in ("national", "free_zone"):
+        raise HTTPException(
+            status_code=400,
+            detail="kind must be 'national' or 'free_zone'",
+        )
+    try:
+        payload = make_random_payload(
+            kind,  # type: ignore[arg-type]
+            req.camera_id,
+            free_zone=req.free_zone,
+            confidence=req.confidence,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    camera_manager.inject_plate_detected(payload)
+    clients = len(getattr(camera_manager, "_ws_clients", set()))
+    logger.info(
+        "Test random %s [%s] %s → %s WS client(s)",
+        kind,
+        req.camera_id,
+        payload.get("plate_number"),
+        clients,
+    )
+    return InjectPlateResponse(
+        success=True,
+        plate_number=payload.get("plate_number"),
+        plate_canonical=payload.get("plate_canonical"),
+        camera_id=req.camera_id,
+        kind=kind,
+        free_zone=payload.get("free_zone"),
+        payload=payload,
+        message="random plate_detected broadcast",
+        clients=clients,
+    )
+
+
+@app.get("/test/meta", tags=["Test"])
+async def test_meta():
+    """Constants for the HTML test UI (letters / free zones / cameras)."""
+    return {
+        "camera_ids": list(CAMERA_IDS),
+        "free_zones": list(FREE_ZONES),
+        "formats": {
+            "national_display": "۱۲ ب ۳۴۵ ۶۷",
+            "national_canonical": "۱۲ب۳۴۵-۶۷",
+            "free_zone_display": "۱۷۲۴۳ ۶۶",
+            "free_zone_canonical": "۱۷۲۴۳-۶۶",
+        },
+    }
 
 
 @app.websocket("/ws")

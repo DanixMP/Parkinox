@@ -10,10 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Remote management cloud (pilot)** — Local-first outbox sync (`SyncOutbox`, UUIDs, `sync_to_cloud`), success-event image capture (`Core/parking_media` + `/success-capture/finalize`), and separate `cloud/` Django reporting replica with Persian RTL HTML dashboard (overview, parked, history, session detail, reports Excel/PDF/CSV, Chart.js analytics, sync health). See [docs/REMOTE_CLOUD.md](docs/REMOTE_CLOUD.md) and [cloud/DEPLOYMENT.md](cloud/DEPLOYMENT.md)
+- **Detection fail capture** — Non-invasive Type A/B/C fail store under `Core/data_fails/` with dedup, rate limits, and best-in-window selection; Django `DetectionFail` review APIs; operator panel to correct plates (via `confirm_gate_event`) or mark not-a-plate. See [docs/DETECTION_FAIL_CAPTURE.md](docs/DETECTION_FAIL_CAPTURE.md)
 - **Local IP camera pipeline** — FastAPI ingests RTSP streams, runs YOLO detection, serves MJPEG preview, broadcasts `plate_detected` via WebSocket
 - **`camera_stream_service.py`** — Entry/exit camera workers with detection cooldown and reconnect logic
 - **FastAPI endpoints** — `POST /cameras/config`, `GET /cameras/status`, `GET /cameras/{entry|exit}/mjpeg`, `WebSocket /ws`
-- **Operator app** — `MjpegPreview` widget, `FastApiCameraApi`, `fastApiDetectionControllerProvider`
+- **Operator app** — `RtspPreview` (`media_kit`) for low-latency IP preview, `FastApiCameraApi`, `fastApiDetectionControllerProvider`
 - **Hikvision quick-setup** in IP camera settings (channels 101/102)
 - **Windows build script** — `parkinox_op/build_windows.bat` with VS 2026 Flutter SDK patch
 - **`run_all.bat`** — One-command launcher for FastAPI, Django, and operator app
@@ -22,9 +24,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - **IP camera architecture** — Detection moved from Flutter screenshot loop to local FastAPI (operator PC)
-- **Operator dashboard** — IP cameras display preview from FastAPI MJPEG instead of direct RTSP in Flutter
+- **Operator dashboard** — IP cameras use direct RTSP sub-stream preview (`media_kit`, channel 102) while FastAPI detects on channel 101
 - **Flutter SDK constraints** — Aligned to Flutter 3.35.3 / Dart 3.9.2
-- **Django default port** — Development uses port 8001 (FastAPI uses 8000)
+- **Django default port** — Development uses port 8001 (FastAPI uses 8002)
 - **Root README** — Rewritten with architecture diagrams and professional documentation index
 
 ### Fixed

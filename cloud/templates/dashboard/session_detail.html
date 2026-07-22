@@ -1,0 +1,73 @@
+{% extends "dashboard/base.html" %}
+{% load jalali_tags %}
+{% block title %}جلسه {{ session.plate_number }} | Parkinox Cloud{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>جزئیات جلسه — {{ session.plate_number }}</h1>
+    <div class="muted">{{ session.session_uuid }}</div>
+  </div>
+  <div>
+    <a class="btn secondary" href="/sessions/{{ session.session_uuid }}/images.zip?site={{ site.site_id }}">دانلود تصاویر ZIP</a>
+  </div>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi"><div class="label">وضعیت</div><div class="value" style="font-size:1.2rem">{{ session.status }}</div></div>
+  <div class="kpi"><div class="label">مدت (دقیقه)</div><div class="value">{% if session.duration_minutes %}{{ session.duration_minutes }}{% else %}—{% endif %}</div></div>
+  <div class="kpi"><div class="label">هزینه</div><div class="value">{{ session.fee_charged }}</div></div>
+  <div class="kpi"><div class="label">پرداخت</div><div class="value" style="font-size:1.1rem">{{ session.payment_method|default:"—" }}</div></div>
+</div>
+
+<div class="panel">
+  <h2>زمان‌بندی</h2>
+  <table class="data">
+    <tr><th>ورود</th><td>{{ session.entry_time|jalali:'time' }} · {{ session.entry_camera_id }}</td></tr>
+    <tr><th>خروج</th><td>{{ session.exit_time|jalali:'time' }} · {{ session.exit_camera_id }}</td></tr>
+    <tr><th>مالک</th><td>{{ session.user_name|default:"—" }}</td></tr>
+    <tr><th>یادداشت</th><td>{{ session.notes|default:"—" }}</td></tr>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>رویدادهای گیت</h2>
+  <table class="data">
+    <thead><tr><th>زمان</th><th>جهت</th><th>پلاک</th><th>اطمینان</th><th>ویرایش</th><th>خودکار</th><th>اپراتور</th></tr></thead>
+    <tbody>
+    {% for e in events %}
+      <tr>
+        <td>{{ e.occurred_at|jalali:'time' }}</td>
+        <td>{{ e.direction }}</td>
+        <td>{{ e.plate_confirmed }}</td>
+        <td>{{ e.confidence }}</td>
+        <td>{% if e.was_edited %}بله{% else %}خیر{% endif %}</td>
+        <td>{% if e.was_auto_approved %}بله{% else %}خیر{% endif %}</td>
+        <td>{{ e.operator_name|default:"—" }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="7">رویدادی ثبت نشده</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>تصاویر</h2>
+  <div class="gallery">
+  {% for eu, imgs in media.items %}
+    {% for t, m in imgs.items %}
+      <figure>
+        {% if m.object_key %}
+          <img src="/files/{{ m.id }}/" alt="{{ t }}">
+        {% else %}
+          <div class="pending-box">تصویر در انتظار</div>
+        {% endif %}
+        <figcaption>{{ eu }} — {{ t }}</figcaption>
+      </figure>
+    {% endfor %}
+  {% empty %}
+    <div class="pending-box">هنوز تصویری همگام نشده است</div>
+  {% endfor %}
+  </div>
+</div>
+{% endblock %}

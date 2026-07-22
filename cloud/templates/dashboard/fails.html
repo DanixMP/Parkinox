@@ -1,0 +1,47 @@
+{% extends "dashboard/base.html" %}
+{% load jalali_tags %}
+{% block title %}تشخیص‌های ناموفق | Parkinox Cloud{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>تشخیص‌های ناموفق / بررسی دستی</h1>
+    <div class="muted">{% if site %}{{ site.site_id }} · در انتظار: {{ pending_count }}{% endif %}</div>
+  </div>
+</div>
+<div class="panel">
+  <form class="filters" method="get">
+    <select name="status">
+      <option value="pending" {% if status == 'pending' %}selected{% endif %}>در انتظار</option>
+      <option value="corrected" {% if status == 'corrected' %}selected{% endif %}>اصلاح‌شده</option>
+      <option value="not_a_plate" {% if status == 'not_a_plate' %}selected{% endif %}>پلاک نیست</option>
+      <option value="all" {% if status == 'all' %}selected{% endif %}>همه</option>
+    </select>
+    <button type="submit">اعمال</button>
+  </form>
+  <table class="data">
+    <thead>
+      <tr><th>تصویر</th><th>زمان</th><th>نوع</th><th>دوربین</th><th>OCR</th><th>وضعیت</th></tr>
+    </thead>
+    <tbody>
+    {% for f in fails %}
+      <tr>
+        <td>
+          {% if f.thumb_media_id %}
+            <img class="thumb" src="/files/{{ f.thumb_media_id }}/" alt="">
+          {% else %}
+            <span class="badge pending">بدون تصویر</span>
+          {% endif %}
+        </td>
+        <td>{{ f.captured_at|jalali:'time' }}</td>
+        <td>{{ f.fail_type }}</td>
+        <td>{{ f.camera_id }}</td>
+        <td>{{ f.raw_ocr|default:"—" }}</td>
+        <td><span class="badge {% if f.review_status == 'pending' %}warn{% else %}ok{% endif %}">{{ f.review_status }}</span></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6">موردی یافت نشد. پس از همگام‌سازی تشخیص‌های ناموفق از سایت محلی اینجا ظاهر می‌شوند.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

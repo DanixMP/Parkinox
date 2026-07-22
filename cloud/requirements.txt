@@ -1,0 +1,11 @@
+# Parkinox Cloud — reporting replica + dashboard
+Django>=4.2.0,<5.0.0
+python-decouple>=3.8
+Pillow>=9.0.0
+psycopg2-binary>=2.9.0
+gunicorn>=21.0.0
+openpyxl>=3.1.0
+reportlab>=4.0.0
+arabic-reshaper>=3.0.0
+python-bidi>=0.4.2
+jdatetime>=5.0.0

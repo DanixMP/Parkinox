@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parkinox FastAPI Debug</title>
+  <style>
+    :root { --bg: #0f1419; --panel: #1a2332; --border: #2d3a4f; --text: #e2e8f0; --accent: #3b82f6; --ok: #22c55e; --err: #ef4444; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .sub { color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .card.full { grid-column: 1 / -1; }
+    .card h2 { font-size: 1rem; margin-bottom: 12px; color: #cbd5e1; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+    button, label.btn { background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary { background: #334155; }
+    input[type=text], input[type=file] { font-size: 0.9rem; }
+    input[type=text] { flex: 1; min-width: 200px; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: #0f172a; color: var(--text); }
+    pre, .log { background: #0f172a; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 0.8rem; overflow: auto; max-height: 280px; white-space: pre-wrap; word-break: break-all; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; }
+    .badge.ok { background: #14532d; color: var(--ok); }
+    .badge.err { background: #450a0a; color: var(--err); }
+    .badge.wait { background: #422006; color: #fbbf24; }
+    #preview { max-width: 100%; max-height: 240px; border-radius: 6px; border: 1px solid var(--border); display: none; }
+    .metric { font-size: 0.85rem; color: #94a3b8; }
+    .metric strong { color: var(--text); }
+    .feed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 900px) { .feed-grid { grid-template-columns: 1fr; } }
+    .feed-panel { background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+    .feed-panel h3 { font-size: 0.95rem; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .feed-wrap { position: relative; background: #000; border-radius: 6px; overflow: hidden; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; }
+    .feed-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .feed-placeholder { color: #64748b; font-size: 0.85rem; text-align: center; padding: 20px; }
+    .url-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+    .url-field label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; }
+  </style>
+</head>
+<body>
+  <h1>Parkinox FastAPI Debug</h1>
+  <p class="sub">Live RTSP → MJPEG preview + YOLO detections via WebSocket. Flutter plate injector: <a href="/test" style="color:#93c5fd">/test</a></p>
+
+  <div class="grid">
+    <div class="card full">
+      <h2>Live camera feeds</h2>
+      <div class="url-field">
+        <label for="entryUrl">Entry RTSP (192.168.1.64)</label>
+        <input type="text" id="entryUrl" value="rtsp://admin:Rose1127@192.168.1.64:555/Streaming/Channels/101" />
+      </div>
+      <div class="url-field">
+        <label for="exitUrl">Exit RTSP (192.168.1.65)</label>
+        <input type="text" id="exitUrl" value="rtsp://admin:Rose1127@192.168.1.65:554/Streaming/Channels/101" />
+      </div>
+      <div class="row">
+        <button onclick="startBothFeeds()" id="startFeedsBtn">Start both feeds</button>
+        <button class="secondary" onclick="stopFeeds()">Stop feeds</button>
+        <button class="secondary" onclick="cameraStatus()">Refresh status</button>
+        <button class="secondary" onclick="wsConnect()">Connect WebSocket</button>
+      </div>
+      <div class="feed-grid">
+        <div class="feed-panel">
+          <h3>Entry <span id="entryBadge" class="badge wait">idle</span></h3>
+          <div class="feed-wrap">
+            <img id="feed-entry" alt="Entry camera" style="display:none" />
+            <div id="feed-entry-ph" class="feed-placeholder">Click “Start both feeds”</div>
+          </div>
+        </div>
+        <div class="feed-panel">
+          <h3>Exit <span id="exitBadge" class="badge wait">idle</span></h3>
+          <div class="feed-wrap">
+            <img id="feed-exit" alt="Exit camera" style="display:none" />
+            <div id="feed-exit-ph" class="feed-placeholder">Click “Start both feeds”</div>
+          </div>
+        </div>
+      </div>
+      <pre id="cameraOut" style="margin-top:12px; max-height:160px;">Camera status will appear here.</pre>
+    </div>
+
+    <div class="card">
+      <h2>Server</h2>
+      <div class="row">
+        <input type="text" id="baseUrl" value="" placeholder="http://localhost:8002" />
+        <button onclick="checkHealth()">Check health</button>
+        <button class="secondary" onclick="loadModels()">Models info</button>
+      </div>
+      <p class="row">Status: <span id="healthBadge" class="badge wait">unknown</span></p>
+      <pre id="healthOut">Click "Check health"</pre>
+    </div>
+
+    <div class="card">
+      <h2>Upload detection</h2>
+      <div class="row">
+        <label class="btn"><input type="file" id="fileInput" accept="image/*" hidden onchange="onFile(this)" />Choose image</label>
+        <button onclick="runDetect()" id="detectBtn" disabled>POST /detect</button>
+      </div>
+      <img id="preview" alt="preview" />
+      <p class="metric" id="timing"></p>
+      <pre id="detectOut">Select an image, then detect.</pre>
+    </div>
+
+    <div class="card full">
+      <h2>WebSocket detections <code>/ws</code></h2>
+      <div class="row">
+        <button onclick="wsConnect()" id="wsConnectBtn">Connect</button>
+        <button class="secondary" onclick="wsDisconnect()" id="wsDisconnectBtn" disabled>Disconnect</button>
+        <button class="secondary" onclick="wsPing()">Ping</button>
+        <button class="secondary" onclick="clearLog()">Clear log</button>
+      </div>
+      <p class="row">WS: <span id="wsBadge" class="badge wait">disconnected</span></p>
+      <div class="log" id="wsLog">plate_detected events appear here when cameras run…</div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let selectedFile = null;
+    let ws = null;
+    let statusTimer = null;
+    let feedsActive = false;
+
+    const DEFAULT_ENTRY = 'rtsp://admin:Rose1127@192.168.1.64:555/Streaming/Channels/101';
+    const DEFAULT_EXIT = 'rtsp://admin:Rose1127@192.168.1.65:554/Streaming/Channels/101';
+
+    function base() {
+      return ($('baseUrl').value || window.location.origin).replace(/\/$/, '');
+    }
+
+    function wsUrl() {
+      const u = new URL(base());
+      u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+      u.pathname = '/ws';
+      return u.toString();
+    }
+
+    function log(msg) {
+      const el = $('wsLog');
+      const ts = new Date().toLocaleTimeString();
+      el.textContent = `[${ts}] ${msg}\n` + el.textContent;
+    }
+
+    function clearLog() { $('wsLog').textContent = ''; }
+
+    function setFeedBadge(slot, state, text) {
+      const el = $(`${slot}Badge`);
+      el.className = `badge ${state}`;
+      el.textContent = text;
+    }
+
+    function showMjpeg(slot) {
+      const img = $(`feed-${slot}`);
+      const ph = $(`feed-${slot}-ph`);
+      ph.style.display = 'none';
+      img.style.display = 'block';
+      img.onerror = () => {
+        setFeedBadge(slot, 'err', 'no stream');
+        ph.textContent = `MJPEG failed — check ${slot} RTSP URL / camera status`;
+        ph.style.display = 'block';
+      };
+      img.src = `${base()}/cameras/${slot}/mjpeg?t=${Date.now()}`;
+    }
+
+    function hideMjpeg(slot) {
+      const img = $(`feed-${slot}`);
+      const ph = $(`feed-${slot}-ph`);
+      img.src = '';
+      img.style.display = 'none';
+      ph.textContent = 'Feed stopped';
+      ph.style.display = 'block';
+      setFeedBadge(slot, 'wait', 'idle');
+    }
+
+    async function startBothFeeds() {
+      const entryUrl = $('entryUrl').value.trim();
+      const exitUrl = $('exitUrl').value.trim();
+      if (!entryUrl || !exitUrl) {
+        alert('Both RTSP URLs are required');
+        return;
+      }
+
+      $('startFeedsBtn').disabled = true;
+      $('cameraOut').textContent = 'Applying camera config…';
+      setFeedBadge('entry', 'wait', 'starting…');
+      setFeedBadge('exit', 'wait', 'starting…');
+
+      const body = {
+        entry_enabled: true,
+        exit_enabled: true,
+        entry_url: entryUrl,
+        exit_url: exitUrl,
+      };
+
+      try {
+        const r = await fetch(`${base()}/cameras/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        $('cameraOut').textContent = JSON.stringify(data, null, 2);
+        feedsActive = true;
+
+        // Give RTSP threads time to connect before attaching MJPEG.
+        await new Promise((res) => setTimeout(res, 2500));
+
+        showMjpeg('entry');
+        showMjpeg('exit');
+        wsConnect();
+        startStatusPolling();
+        await cameraStatus();
+      } catch (e) {
+        $('cameraOut').textContent = String(e);
+        setFeedBadge('entry', 'err', 'error');
+        setFeedBadge('exit', 'err', 'error');
+      } finally {
+        $('startFeedsBtn').disabled = false;
+      }
+    }
+
+    async function stopFeeds() {
+      feedsActive = false;
+      stopStatusPolling();
+      hideMjpeg('entry');
+      hideMjpeg('exit');
+      await disableCameras();
+    }
+
+    function startStatusPolling() {
+      stopStatusPolling();
+      statusTimer = setInterval(cameraStatus, 3000);
+    }
+
+    function stopStatusPolling() {
+      if (statusTimer) {
+        clearInterval(statusTimer);
+        statusTimer = null;
+      }
+    }
+
+    async function checkHealth() {
+      $('healthBadge').className = 'badge wait';
+      $('healthBadge').textContent = 'checking…';
+      try {
+        const t0 = performance.now();
+        const r = await fetch(`${base()}/health`);
+        const data = await r.json();
+        const ms = Math.round(performance.now() - t0);
+        $('healthOut').textContent = JSON.stringify(data, null, 2) + `\n\n(${ms} ms)`;
+        const ok = r.ok && data.models_loaded;
+        $('healthBadge').className = ok ? 'badge ok' : 'badge err';
+        $('healthBadge').textContent = ok ? 'ok' : 'error';
+      } catch (e) {
+        $('healthOut').textContent = String(e);
+        $('healthBadge').className = 'badge err';
+        $('healthBadge').textContent = 'offline';
+      }
+    }
+
+    async function loadModels() {
+      try {
+        const r = await fetch(`${base()}/models/info`);
+        $('healthOut').textContent = JSON.stringify(await r.json(), null, 2);
+      } catch (e) {
+        $('healthOut').textContent = String(e);
+      }
+    }
+
+    function onFile(input) {
+      selectedFile = input.files[0] || null;
+      $('detectBtn').disabled = !selectedFile;
+      const img = $('preview');
+      if (selectedFile) {
+        img.src = URL.createObjectURL(selectedFile);
+        img.style.display = 'block';
+        $('detectOut').textContent = `Ready: ${selectedFile.name} (${Math.round(selectedFile.size/1024)} KB)`;
+      }
+    }
+
+    async function runDetect() {
+      if (!selectedFile) return;
+      $('detectBtn').disabled = true;
+      $('detectOut').textContent = 'Detecting…';
+      const fd = new FormData();
+      fd.append('image', selectedFile);
+      const t0 = performance.now();
+      try {
+        const r = await fetch(`${base()}/detect`, { method: 'POST', body: fd });
+        const data = await r.json();
+        const ms = Math.round(performance.now() - t0);
+        $('timing').innerHTML = `<strong>${ms} ms</strong> — HTTP ${r.status}`;
+        $('detectOut').textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        $('detectOut').textContent = String(e);
+      } finally {
+        $('detectBtn').disabled = !selectedFile;
+      }
+    }
+
+    async function cameraStatus() {
+      try {
+        const r = await fetch(`${base()}/cameras/status`);
+        const data = await r.json();
+        $('cameraOut').textContent = JSON.stringify(data, null, 2);
+
+        for (const slot of ['entry', 'exit']) {
+          const cam = data[slot];
+          if (!cam || !cam.enabled) {
+            setFeedBadge(slot, 'wait', 'disabled');
+            continue;
+          }
+          if (cam.connected) {
+            setFeedBadge(slot, 'ok', 'connected');
+          } else {
+            setFeedBadge(slot, 'err', cam.error ? 'error' : 'connecting…');
+          }
+        }
+      } catch (e) {
+        $('cameraOut').textContent = String(e);
+      }
+    }
+
+    async function disableCameras() {
+      const body = { entry_enabled: false, exit_enabled: false, entry_url: null, exit_url: null };
+      const r = await fetch(`${base()}/cameras/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      $('cameraOut').textContent = JSON.stringify(await r.json(), null, 2);
+    }
+
+    function wsConnect() {
+      if (ws && ws.readyState === WebSocket.OPEN) return;
+      if (ws) wsDisconnect();
+      const url = wsUrl();
+      log(`Connecting ${url}`);
+      ws = new WebSocket(url);
+      ws.onopen = () => {
+        $('wsBadge').className = 'badge ok';
+        $('wsBadge').textContent = 'connected';
+        $('wsConnectBtn').disabled = true;
+        $('wsDisconnectBtn').disabled = false;
+        log('OPEN');
+      };
+      ws.onmessage = (ev) => {
+        log(`← ${ev.data}`);
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === 'plate_detected' && msg.data) {
+            const cam = msg.data.camera_id || '?';
+            const plate = msg.data.plate_number || '?';
+            const canon = msg.data.plate_canonical ? ` (${msg.data.plate_canonical})` : '';
+            log(`★ VALID [${cam}] ${plate}${canon}`);
+          } else if (msg.type === 'plate_rejected' && msg.data) {
+            const cam = msg.data.camera_id || '?';
+            log(`✗ REJECTED [${cam}] ${msg.data.raw_ocr} — ${msg.data.validation_error}`);
+          }
+        } catch (_) { /* ignore */ }
+      };
+      ws.onerror = () => log('ERROR');
+      ws.onclose = () => {
+        $('wsBadge').className = 'badge wait';
+        $('wsBadge').textContent = 'disconnected';
+        $('wsConnectBtn').disabled = false;
+        $('wsDisconnectBtn').disabled = true;
+        log('CLOSED');
+        ws = null;
+      };
+    }
+
+    function wsDisconnect() {
+      if (ws) ws.close();
+    }
+
+    function wsPing() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) { alert('Connect WebSocket first'); return; }
+      ws.send(JSON.stringify({ type: 'ping' }));
+      log('→ ping');
+    }
+
+    $('baseUrl').value = window.location.origin;
+    if (!$('entryUrl').value) $('entryUrl').value = DEFAULT_ENTRY;
+    if (!$('exitUrl').value) $('exitUrl').value = DEFAULT_EXIT;
+    checkHealth();
+  </script>
+</body>
+</html>

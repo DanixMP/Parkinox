@@ -1,5 +1,8 @@
+import uuid
+
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from accounts.models import User
 from plates.models import Plate
 
@@ -20,6 +23,16 @@ class GateEvent(models.Model):
     ]
     
     id = models.AutoField(primary_key=True)
+
+    # Stable sync identity (additive; integer PK unchanged)
+    event_uuid = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        db_index=True,
+        default=uuid.uuid4,
+        help_text="Stable UUID for cloud sync / outbox idempotency",
+    )
     
     # Camera and direction information
     camera_id = models.CharField(
@@ -201,6 +214,16 @@ class ParkingSession(models.Model):
     ]
     
     id = models.AutoField(primary_key=True)
+
+    # Stable sync identity (additive; integer PK unchanged)
+    session_uuid = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        db_index=True,
+        default=uuid.uuid4,
+        help_text="Stable UUID for cloud sync / outbox idempotency",
+    )
     
     # Plate information - either registered plate OR guest plate number
     plate = models.ForeignKey(
@@ -419,3 +442,272 @@ class RateConfig(models.Model):
                 is_active=False
             )
         super().save(*args, **kwargs)
+
+
+class OperationalState(models.Model):
+    """Singleton operational season boundary for live dashboard counters."""
+
+    season_started_at = models.DateTimeField(default=timezone.now)
+    last_reset_at = models.DateTimeField(null=True, blank=True)
+    reset_count = models.PositiveIntegerField(default=0)
+    last_reset_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='season_resets',
+    )
+
+    class Meta:
+        db_table = 'operational_state'
+        verbose_name = 'Operational state'
+        verbose_name_plural = 'Operational state'
+
+    def __str__(self):
+        return f'Season since {self.season_started_at:%Y-%m-%d %H:%M}'
+
+    @classmethod
+    def get_singleton(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class DetectionFail(models.Model):
+    """
+    Operator-reviewable failed plate detection (Type A/B/C).
+
+    Stored separately from GateEvent until an operator corrects the plate
+    (then linked via gate_event) or marks the sample as not-a-plate.
+    """
+
+    FAIL_TYPE_CHOICES = [
+        ('ocr_invalid_format', 'OCR invalid Iranian format'),
+        ('ocr_empty', 'OCR empty / below threshold'),
+        ('operator_confirmed_miss', 'Operator confirmed miss (no bbox)'),
+    ]
+
+    REVIEW_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('corrected', 'Corrected'),
+        ('not_a_plate', 'Not a plate'),
+        ('processed', 'Processed'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    fail_type = models.CharField(max_length=32, choices=FAIL_TYPE_CHOICES)
+    raw_ocr = models.CharField(max_length=64, blank=True, default='')
+    validation_error = models.CharField(max_length=512, blank=True, default='')
+    plate_confidence = models.DecimalField(
+        max_digits=6, decimal_places=4, null=True, blank=True
+    )
+    char_confidence = models.DecimalField(
+        max_digits=6, decimal_places=4, null=True, blank=True
+    )
+    bbox = models.JSONField(null=True, blank=True)
+    camera_id = models.CharField(max_length=32)
+    direction = models.CharField(
+        max_length=10,
+        choices=GateEvent.DIRECTION_CHOICES,
+        default='entry',
+    )
+    full_image = models.ImageField(
+        upload_to='detection_fails/%Y/%m/%d/',
+        null=True,
+        blank=True,
+        help_text='Scene A — frame at detection-fail time',
+    )
+    scene_b_image = models.ImageField(
+        upload_to='detection_fails/%Y/%m/%d/scene_b/',
+        null=True,
+        blank=True,
+        help_text='Scene B — delayed RTSP frame or padded bbox context',
+    )
+    crop_image = models.ImageField(
+        upload_to='detection_fails/%Y/%m/%d/crops/',
+        null=True,
+        blank=True,
+    )
+    has_scene_b = models.BooleanField(default=False)
+    scene_b_source = models.CharField(
+        max_length=32,
+        blank=True,
+        default='',
+        help_text='rtsp_delayed | padded_bbox | empty',
+    )
+    local_data_path = models.CharField(
+        max_length=512,
+        blank=True,
+        default='',
+        help_text='Relative path under Core/data_fails/',
+    )
+    review_status = models.CharField(
+        max_length=20,
+        choices=REVIEW_STATUS_CHOICES,
+        default='pending',
+        db_index=True,
+    )
+    not_a_plate = models.BooleanField(default=False)
+    label_ground_truth = models.CharField(max_length=32, blank=True, default='')
+    reviewed_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='reviewed_detection_fails',
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    gate_event = models.ForeignKey(
+        GateEvent,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='source_detection_fails',
+    )
+    sharpness = models.FloatField(null=True, blank=True)
+    captured_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'detection_fails'
+        verbose_name = 'Detection fail'
+        verbose_name_plural = 'Detection fails'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['review_status', '-created_at']),
+            models.Index(fields=['fail_type', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.fail_type} [{self.review_status}] {self.camera_id}'
+
+
+class EventMedia(models.Model):
+    """Local metadata for successful entry/exit capture images (cloud-syncable)."""
+
+    IMAGE_TYPE_CHOICES = [
+        ('scene_a', 'Scene A'),
+        ('scene_b', 'Scene B'),
+        ('crop', 'Plate crop'),
+        ('thumbnail', 'Thumbnail'),
+    ]
+
+    UPLOAD_STATUS_CHOICES = [
+        ('local_only', 'Local only'),
+        ('pending', 'Pending upload'),
+        ('uploaded', 'Uploaded'),
+        ('failed', 'Failed'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    event_uuid = models.UUIDField(db_index=True)
+    session_uuid = models.UUIDField(null=True, blank=True, db_index=True)
+    gate_event = models.ForeignKey(
+        GateEvent,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='event_media',
+    )
+    image_type = models.CharField(max_length=20, choices=IMAGE_TYPE_CHOICES)
+    local_path = models.CharField(max_length=1024, blank=True, default='')
+    content_hash = models.CharField(max_length=64, blank=True, default='', db_index=True)
+    size_bytes = models.PositiveIntegerField(default=0)
+    upload_status = models.CharField(
+        max_length=20,
+        choices=UPLOAD_STATUS_CHOICES,
+        default='pending',
+        db_index=True,
+    )
+    captured_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'event_media'
+        verbose_name = 'Event media'
+        verbose_name_plural = 'Event media'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['event_uuid', 'image_type'],
+                name='event_media_uuid_type_uniq',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['upload_status', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.image_type} {self.event_uuid}'
+
+
+class SyncOutbox(models.Model):
+    """Durable local-first queue for cloud reporting replica push."""
+
+    PAYLOAD_TYPE_CHOICES = [
+        ('gate_event', 'Gate event'),
+        ('parking_session', 'Parking session'),
+        ('event_media', 'Event media'),
+        ('detection_fail', 'Detection fail'),
+        ('season_reset', 'Season reset'),
+    ]
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sending', 'Sending'),
+        ('acked', 'Acked'),
+        ('dead_letter', 'Dead letter'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    payload_type = models.CharField(max_length=32, choices=PAYLOAD_TYPE_CHOICES, db_index=True)
+    payload_uuid = models.UUIDField(db_index=True)
+    body_json = models.JSONField(default=dict)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        db_index=True,
+    )
+    attempts = models.PositiveIntegerField(default=0)
+    next_attempt_at = models.DateTimeField(default=timezone.now, db_index=True)
+    last_error = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    acked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'sync_outbox'
+        verbose_name = 'Sync outbox'
+        verbose_name_plural = 'Sync outbox'
+        indexes = [
+            models.Index(fields=['status', 'next_attempt_at', 'payload_type']),
+            models.Index(fields=['payload_type', 'payload_uuid']),
+        ]
+
+    def __str__(self):
+        return f'{self.payload_type}:{self.payload_uuid} [{self.status}]'
+
+
+class SyncState(models.Model):
+    """Singleton-ish site sync health counters."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    last_error_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, default='')
+    pending_metadata_count = models.PositiveIntegerField(default=0)
+    pending_image_count = models.PositiveIntegerField(default=0)
+    dead_letter_count = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'sync_state'
+        verbose_name = 'Sync state'
+        verbose_name_plural = 'Sync state'
+
+    def __str__(self):
+        return f'SyncState pending_meta={self.pending_metadata_count}'
+
+    @classmethod
+    def get_singleton(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

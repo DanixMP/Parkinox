@@ -1,0 +1,23 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+{% block title %}ورود | Parkinox Cloud{% endblock %}
+{% block login_content %}
+<div class="login-wrap">
+  <form class="login-card" method="post">
+    {% csrf_token %}
+    <div class="login-brand">
+      <img src="{% static 'img/iau_logo.png' %}" alt="دانشگاه آزاد اسلامی" class="login-logo">
+      <div>
+        <h1>پارکینوکس</h1>
+        <p class="muted">ورود به داشبورد مدیریت پایلوت</p>
+      </div>
+    </div>
+    <label>نام کاربری</label>
+    <input name="username" autocomplete="username" required>
+    <label>رمز عبور</label>
+    <input type="password" name="password" autocomplete="current-password" required>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <button class="btn" type="submit">ورود</button>
+  </form>
+</div>
+{% endblock %}

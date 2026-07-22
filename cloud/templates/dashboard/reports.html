@@ -1,0 +1,30 @@
+{% extends "dashboard/base.html" %}
+{% block title %}گزارش‌ها | Parkinox Cloud{% endblock %}
+{% block content %}
+<div class="topbar"><div><h1>گزارش‌ها و خروجی</h1></div></div>
+<div class="panel">
+  <p class="muted">Excel شامل دادهٔ کامل است. PDF خلاصه مدیریتی است. تاریخ‌ها را به صورت شمسی وارد کنید (مثال: ۱۴۰۴/۰۱/۱۵).</p>
+  <form class="filters" method="get" action="/reports/excel/">
+    <input type="hidden" name="site" value="{{ site.site_id }}">
+    <input class="jalali-date-input" name="from" placeholder="از ۱۴۰۴/۰۱/۰۱" value="{{ params.from }}">
+    <input class="jalali-date-input" name="to" placeholder="تا ۱۴۰۴/۰۱/۳۱" value="{{ params.to }}">
+    <select name="type">
+      <option value="sessions">جلسات</option>
+      <option value="parked">پارک‌شده فعلی</option>
+    </select>
+    <button type="submit">دانلود Excel</button>
+  </form>
+  <form class="filters" method="get" action="/reports/pdf/">
+    <input type="hidden" name="site" value="{{ site.site_id }}">
+    <input class="jalali-date-input" name="from" placeholder="از ۱۴۰۴/۰۱/۰۱" value="{{ params.from }}">
+    <input class="jalali-date-input" name="to" placeholder="تا ۱۴۰۴/۰۱/۳۱" value="{{ params.to }}">
+    <button class="btn accent" type="submit">دانلود PDF خلاصه</button>
+  </form>
+  <form class="filters" method="get" action="/reports/csv/">
+    <input type="hidden" name="site" value="{{ site.site_id }}">
+    <input class="jalali-date-input" name="from" placeholder="از ۱۴۰۴/۰۱/۰۱" value="{{ params.from }}">
+    <input class="jalali-date-input" name="to" placeholder="تا ۱۴۰۴/۰۱/۳۱" value="{{ params.to }}">
+    <button class="btn secondary" type="submit">دانلود CSV</button>
+  </form>
+</div>
+{% endblock %}

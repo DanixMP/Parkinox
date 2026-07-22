@@ -4,7 +4,7 @@ from django.utils import timezone
 from decimal import Decimal
 from accounts.models import User
 from plates.models import Plate
-from .models import GateEvent, ParkingSession
+from .models import GateEvent, ParkingSession, OperationalState
 
 
 class GateEventModelTest(TestCase):
@@ -2238,3 +2238,231 @@ class CreateGateEventAPITest(TestCase):
         self.assertTrue(response.data['is_registered'])
         self.assertEqual(response.data['wallet_balance'], 100000)
         self.assertTrue(response.data['has_active_session'])
+
+    def test_lookup_plate_includes_active_session_entry_fields(self):
+        from datetime import timedelta
+
+        from .models import GateEvent
+
+        entry_time = timezone.now() - timedelta(hours=2)
+        entry_event = GateEvent.objects.create(
+            camera_id='entry',
+            direction='entry',
+            plate_raw='۱۲ب۳۴۵-۶۷',
+            plate_confirmed='۱۲ب۳۴۵-۶۷',
+            was_edited=False,
+            was_auto_approved=True,
+            was_rejected=False,
+            operator_id=self.operator.id,
+        )
+        GateEvent.objects.filter(pk=entry_event.pk).update(created_at=entry_time)
+        entry_event.refresh_from_db()
+        session = ParkingSession.objects.create(
+            plate=self.plate,
+            entry_event=entry_event,
+            entry_time=entry_time,
+            status='parked',
+        )
+
+        response = self.client.get(
+            '/api/parking/plates/lookup/',
+            {'plate': '۱۲ب۳۴۵-۶۷'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['has_active_session'])
+        self.assertEqual(response.data['active_session_id'], session.id)
+        self.assertIsNotNone(response.data['active_session_entry_time'])
+        self.assertEqual(response.data['entry_camera_id'], 'entry')
+        self.assertIsNotNone(response.data['duration_minutes'])
+        self.assertGreaterEqual(response.data['duration_minutes'], 119)
+        self.assertIsNotNone(response.data['estimated_fee'])
+
+    def test_lookup_plate_no_active_session_fields_null(self):
+        response = self.client.get(
+            '/api/parking/plates/lookup/',
+            {'plate': '۱۲ب۳۴۵-۶۷'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['has_active_session'])
+        self.assertIsNone(response.data['active_session_id'])
+        self.assertIsNone(response.data['active_session_entry_time'])
+        self.assertIsNone(response.data['duration_minutes'])
+        self.assertIsNone(response.data['estimated_fee'])
+        self.assertIsNone(response.data['entry_camera_id'])
+
+
+class SeasonResetTest(TestCase):
+    """Tests for operational season reset and live stats filtering."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        self.client = APIClient()
+
+        self.operator = User.objects.create_user(
+            phone='+989123456793',
+            password='testpass123',
+            full_name='Season Reset Operator',
+            role='operator',
+        )
+        self.student = User.objects.create_user(
+            phone='+989123456794',
+            password='testpass123',
+            full_name='Season Reset Student',
+            student_id='40099999',
+            role='student',
+        )
+        self.plate = Plate.objects.create(
+            user=self.student,
+            plate_number='۲۲ب۳۳۳-۴۴',
+            is_primary=True,
+            is_active=True,
+        )
+
+        self.client.force_authenticate(user=self.operator)
+
+        OperationalState.objects.update_or_create(
+            pk=1,
+            defaults={
+                'season_started_at': timezone.now() - timezone.timedelta(days=365),
+                'reset_count': 0,
+            },
+        )
+
+    def _get_live_stats(self):
+        from parking.season_service import compute_live_stats
+
+        return compute_live_stats()
+
+    def test_reset_closes_parked_and_unpaid_sessions(self):
+        parked = ParkingSession.objects.create(
+            plate=self.plate,
+            entry_time=timezone.now() - timezone.timedelta(hours=1),
+            status='parked',
+        )
+        unpaid = ParkingSession.objects.create(
+            guest_plate_number='۵۵ج۶۶۶-۷۷',
+            entry_time=timezone.now() - timezone.timedelta(hours=2),
+            exit_time=timezone.now() - timezone.timedelta(hours=1),
+            status='unpaid',
+            fee_charged=Decimal('10000'),
+        )
+
+        response = self.client.post('/api/parking/season/reset/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['closed_sessions'], 2)
+        self.assertEqual(response.data['reset_count'], 1)
+
+        parked.refresh_from_db()
+        unpaid.refresh_from_db()
+        self.assertEqual(parked.status, 'waived')
+        self.assertEqual(unpaid.status, 'waived')
+        self.assertEqual(parked.payment_method, 'waived')
+        self.assertIsNotNone(parked.exit_time)
+        self.assertIn('Season reset', parked.notes)
+
+    def test_live_stats_and_lists_zero_after_reset(self):
+        now = timezone.now()
+        GateEvent.objects.create(
+            camera_id='entry',
+            direction='entry',
+            plate_confirmed='۲۲ب۳۳۳-۴۴',
+            operator=self.operator,
+        )
+        ParkingSession.objects.create(
+            plate=self.plate,
+            entry_time=now - timezone.timedelta(minutes=30),
+            status='parked',
+        )
+        ParkingSession.objects.create(
+            guest_plate_number='۸۸د۹۹۹-۱۱',
+            entry_time=now - timezone.timedelta(hours=1),
+            exit_time=now - timezone.timedelta(minutes=20),
+            status='unpaid',
+            fee_charged=Decimal('5000'),
+        )
+
+        stats_before = self._get_live_stats()
+        self.assertGreaterEqual(stats_before['entries_today'], 1)
+        self.assertGreaterEqual(stats_before['currently_parked'], 1)
+
+        reset_response = self.client.post('/api/parking/season/reset/')
+        self.assertEqual(reset_response.status_code, 200)
+
+        parked_response = self.client.get(
+            '/api/parking/sessions/',
+            {'status': 'parked'},
+        )
+        unpaid_response = self.client.get(
+            '/api/parking/sessions/',
+            {'status': 'unpaid'},
+        )
+        self.assertEqual(parked_response.data['count'], 0)
+        self.assertEqual(unpaid_response.data['count'], 0)
+
+        stats_after = self._get_live_stats()
+        self.assertEqual(stats_after['entries_today'], 0)
+        self.assertEqual(stats_after['exits_today'], 0)
+        self.assertEqual(stats_after['currently_parked'], 0)
+        self.assertEqual(stats_after['revenue_today'], 0)
+
+    def test_archive_still_lists_pre_reset_sessions(self):
+        entry_time = timezone.now() - timezone.timedelta(hours=1)
+        session = ParkingSession.objects.create(
+            plate=self.plate,
+            entry_time=entry_time,
+            status='parked',
+        )
+
+        reset_response = self.client.post('/api/parking/season/reset/')
+        self.assertEqual(reset_response.status_code, 200)
+        session.refresh_from_db()
+        self.assertEqual(session.status, 'waived')
+
+        from zoneinfo import ZoneInfo
+
+        tehran_tz = ZoneInfo('Asia/Tehran')
+        today = timezone.now().astimezone(tehran_tz).date().isoformat()
+
+        archive_response = self.client.get(
+            '/api/reports/daily/sessions/',
+            {'date': today},
+        )
+        self.assertEqual(archive_response.status_code, 200)
+        session_ids = [item['id'] for item in archive_response.data['sessions']]
+        self.assertIn(session.id, session_ids)
+
+    def test_reset_deletes_pending_detection_fails_keeps_corrected(self):
+        import uuid
+
+        from parking.models import DetectionFail
+
+        pending = DetectionFail.objects.create(
+            id=uuid.uuid4(),
+            fail_type='ocr_invalid_format',
+            camera_id='entry_camera',
+            direction='entry',
+            review_status='pending',
+        )
+        corrected = DetectionFail.objects.create(
+            id=uuid.uuid4(),
+            fail_type='ocr_empty',
+            camera_id='exit_camera',
+            direction='exit',
+            review_status='corrected',
+            label_ground_truth='۱۲ ب ۳۴۵ ۶۷',
+        )
+
+        response = self.client.post('/api/parking/season/reset/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['deleted_detection_fails'], 1)
+
+        self.assertFalse(DetectionFail.objects.filter(pk=pending.pk).exists())
+        self.assertTrue(DetectionFail.objects.filter(pk=corrected.pk).exists())
+        self.assertEqual(
+            DetectionFail.objects.get(pk=corrected.pk).review_status,
+            'corrected',
+        )

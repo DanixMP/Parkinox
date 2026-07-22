@@ -1,0 +1,32 @@
+{% extends "dashboard/base.html" %}
+{% load jalali_tags %}
+{% block title %}پارک‌شده‌ها | Parkinox Cloud{% endblock %}
+{% block content %}
+<div class="topbar"><div><h1>خودروهای پارک‌شده</h1><div class="muted">{% if site %}{{ site.site_id }}{% else %}—{% endif %}</div></div></div>
+<div class="panel">
+<table class="data">
+  <thead><tr><th>تصویر</th><th>پلاک</th><th>ورود</th><th>مدت</th><th>دوربین</th><th>مالک</th><th></th></tr></thead>
+  <tbody>
+  {% for s in sessions %}
+    <tr>
+      <td>
+        {% if s.thumb_media_id %}
+          <img class="thumb" src="/files/{{ s.thumb_media_id }}/" alt="">
+        {% else %}
+          <span class="badge pending">در انتظار تصویر</span>
+        {% endif %}
+      </td>
+      <td>{{ s.plate_number }}</td>
+      <td>{{ s.entry_time|jalali:'time' }}</td>
+      <td>{% if s.duration_minutes %}{{ s.duration_minutes }}{% else %}—{% endif %}</td>
+      <td>{{ s.entry_camera_id }}</td>
+      <td>{{ s.user_name|default:"—" }}</td>
+      <td><a href="/sessions/{{ s.session_uuid }}/">جزئیات</a></td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="7">خودرویی پارک نشده است.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

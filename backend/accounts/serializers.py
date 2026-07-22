@@ -118,5 +118,6 @@ class TokenRefreshSerializer(serializers.Serializer):
         access_token = str(refresh.access_token)
         
         return {
+            'access': access_token,
             'access_token': access_token,
         }

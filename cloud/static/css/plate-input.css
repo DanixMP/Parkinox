@@ -1,0 +1,77 @@
+/* Iranian plate segmented input — mirrored from Core/Student_panel.html */
+.plate-input-ir {
+  display: flex; align-items: stretch; direction: ltr;
+  background: #fff; color: #111; border: 3px solid #111;
+  border-radius: 8px; overflow: visible;
+  box-shadow: 0 4px 14px rgba(0,0,0,.12);
+  max-width: 100%;
+  min-height: 56px;
+}
+.plate-input-ir .plate-strip {
+  background: #003399; color: #fff;
+  padding: 8px 6px; min-width: 34px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 700; line-height: 1.15; flex-shrink: 0;
+  border-radius: 5px 0 0 5px;
+}
+.plate-input-ir .plate-strip .flag {
+  display: flex; flex-direction: column; width: 22px; height: 12px;
+  margin-bottom: 4px; border: 1px solid rgba(255,255,255,.35);
+}
+.plate-input-ir .plate-strip .flag span { flex: 1; }
+.plate-input-ir .plate-strip .flag .g { background: #239F40; }
+.plate-input-ir .plate-strip .flag .w { background: #fff; }
+.plate-input-ir .plate-strip .flag .r { background: #DA0000; }
+.plate-input-cells {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  gap: 4px; padding: 10px 8px; flex-wrap: nowrap; min-width: 0;
+}
+.plate-cell {
+  box-sizing: border-box;
+  width: 34px; height: 44px;
+  border: 2px solid #ccc; border-radius: 4px;
+  background: #f8f8f8; color: #111;
+  font-family: inherit; font-size: 18px; font-weight: 800;
+  line-height: 1; text-align: center; padding: 0;
+  flex-shrink: 0;
+  overflow: visible;
+}
+.plate-cell:focus {
+  outline: none; border-color: #059669;
+  box-shadow: 0 0 0 2px rgba(5,150,105,.35);
+  background: #fff;
+}
+.plate-cell.filled { border-color: #059669; background: #fff; }
+.plate-cell.plate-letter {
+  width: 42px; height: 44px; font-size: 16px; cursor: pointer;
+  background: #e8f5ee; border-color: #059669; color: #065f46;
+}
+.plate-cell.plate-letter.empty {
+  color: #999; background: #f0f0f0; border-color: #ccc; font-size: 11px;
+}
+.plate-sep { color: #666; font-size: 22px; padding: 0 2px; user-select: none; flex-shrink: 0; }
+.plate-gap { width: 4px; flex-shrink: 0; }
+.letter-picker-overlay {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,.45); align-items: center; justify-content: center;
+  padding: 16px;
+}
+.letter-picker-overlay.show { display: flex; }
+.letter-picker-sheet {
+  width: 100%; max-width: 420px;
+  background: #fff; border-radius: 14px; padding: 1rem;
+  border: 1px solid #d7dde5;
+}
+.letter-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.4rem; margin-top: 0.6rem;
+}
+.letter-grid button {
+  font: inherit; font-weight: 700; padding: 0.55rem;
+  border: 1px solid #d7dde5; border-radius: 8px; background: #f8fafc; cursor: pointer;
+}
+.letter-grid button:hover { background: #e8f5ee; border-color: #059669; }
+.jalali-date-input {
+  font: inherit; padding: 0.55rem 0.7rem; border-radius: 10px;
+  border: 1px solid #d7dde5; background: #fff; direction: ltr; text-align: center;
+  min-width: 8.5rem; cursor: pointer;
+}

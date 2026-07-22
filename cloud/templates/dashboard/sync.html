@@ -1,0 +1,70 @@
+{% extends "dashboard/base.html" %}
+{% load jalali_tags %}
+{% block title %}همگام‌سازی | Parkinox Cloud{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>وضعیت همگام‌سازی</h1><div class="muted">{% if site %}{{ site.site_id }}{% endif %}</div></div>
+  <div class="topbar-actions">
+    <button type="button" class="btn accent" id="open-season-reset">پایان فصل و شروع مجدد</button>
+    {% if not local_proxy_configured %}
+    <span class="muted" style="font-size:0.8rem">بازنشانی روی ابر؛ پروکسی محلی پیکربندی نشده</span>
+    {% endif %}
+  </div>
+</div>
+<div class="kpi-grid">
+  <div class="kpi"><div class="label">آخرین دریافت</div><div class="value" style="font-size:1rem">{{ site.last_ingest_at|jalali:'time' }}</div></div>
+  <div class="kpi"><div class="label">رویدادهای گیت (واقعی)</div><div class="value">{{ gate_total }}</div></div>
+  <div class="kpi"><div class="label">جلسات همگام‌شده</div><div class="value">{{ session_total }}</div></div>
+  <div class="kpi"><div class="label">تشخیص‌های ناموفق</div><div class="value">{{ fail_total }}</div><div class="hint">تصاویر دریافتی: {% if cursor %}{{ cursor.images_received }}{% else %}0{% endif %}</div></div>
+</div>
+<div class="panel">
+  <h2>تصاویر نیازمند پیگیری</h2>
+  <table class="data">
+    <thead><tr><th>رویداد</th><th>نوع</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+    <tbody>
+    {% for m in pending_media %}
+      <tr>
+        <td>{{ m.event_uuid }}</td>
+        <td>{{ m.image_type }}</td>
+        <td><span class="badge warn">{{ m.upload_status }}</span></td>
+        <td>
+          <form method="post" action="/sync/requeue/">{% csrf_token %}
+            <input type="hidden" name="site" value="{{ site.site_id }}">
+            <input type="hidden" name="media_id" value="{{ m.id }}">
+            <button class="btn ghost" type="submit">در صف مجدد</button>
+          </form>
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4">موردی در صف نیست</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<dialog id="season-reset-dialog" class="season-dialog">
+  <form method="post" action="/season/reset/">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="/sync/">
+    <h2>شروع فصل جدید؟</h2>
+    <p class="muted">جلسات پارک‌شده و تشخیص‌های در انتظار روی ابر پاک می‌شوند. در صورت پیکربندی، سایت محلی نیز فراخوانی می‌شود.</p>
+    <label>رمز عبور داشبورد</label>
+    <input type="password" name="password" required autocomplete="current-password">
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" id="close-season-reset">انصراف</button>
+      <button type="submit" class="btn accent">تأیید پایان فصل</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const dlg = document.getElementById('season-reset-dialog');
+  const openBtn = document.getElementById('open-season-reset');
+  const closeBtn = document.getElementById('close-season-reset');
+  if (openBtn && dlg) openBtn.addEventListener('click', () => dlg.showModal());
+  if (closeBtn && dlg) closeBtn.addEventListener('click', () => dlg.close());
+})();
+</script>
+{% endblock %}

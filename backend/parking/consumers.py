@@ -24,6 +24,7 @@ import json
 import logging
 
 from .models import GateEvent, ParkingSession
+from .season_service import compute_live_stats, get_season_started_at
 from .services import ParkingSessionService
 from .gate_event_service import confirm_gate_event, reject_gate_event
 
@@ -251,6 +252,8 @@ class ParkingConsumer(AsyncWebsocketConsumer):
         confidence_score = data.get('confidence_score')
         was_edited = data.get('was_edited', False)
         was_auto_approved = data.get('was_auto_approved', False)
+        detection_event_id = data.get('detection_event_id')
+        client_event_uuid = data.get('client_event_uuid') or data.get('event_uuid')
         
         # Validate direction
         if direction not in ['entry', 'exit']:
@@ -270,7 +273,9 @@ class ParkingConsumer(AsyncWebsocketConsumer):
                 confidence_score=confidence_score,
                 was_edited=was_edited,
                 was_auto_approved=was_auto_approved,
-                operator_id=self.user.id
+                operator_id=self.user.id,
+                detection_event_id=detection_event_id,
+                client_event_uuid=client_event_uuid,
             )
             
             # Send acknowledgment (Requirement 24.4, 24.5)
@@ -527,9 +532,19 @@ class ParkingConsumer(AsyncWebsocketConsumer):
             return None
     
     @database_sync_to_async
-    def create_gate_event_and_session(self, camera_id, direction, plate_raw,
-                                      plate_confirmed, confidence_score,
-                                      was_edited, was_auto_approved, operator_id):
+    def create_gate_event_and_session(
+        self,
+        camera_id,
+        direction,
+        plate_raw,
+        plate_confirmed,
+        confidence_score,
+        was_edited,
+        was_auto_approved,
+        operator_id,
+        detection_event_id=None,
+        client_event_uuid=None,
+    ):
         """Create gate event and process parking session (shared with REST API)."""
         return confirm_gate_event(
             operator_id=operator_id,
@@ -540,6 +555,8 @@ class ParkingConsumer(AsyncWebsocketConsumer):
             confidence_score=confidence_score,
             was_edited=was_edited,
             was_auto_approved=was_auto_approved,
+            detection_event_id=detection_event_id,
+            client_event_uuid=client_event_uuid,
         )
 
     @database_sync_to_async
@@ -589,62 +606,4 @@ class ParkingConsumer(AsyncWebsocketConsumer):
         - 25.5: Count only completed and waived sessions for revenue
         - 53.4: Use Asia/Tehran timezone for date boundaries
         """
-        tehran_tz = ZoneInfo('Asia/Tehran')
-
-        # Get today's date in Tehran timezone
-        now_tehran = datetime.datetime.now(tehran_tz)
-        today_tehran = now_tehran.date()
-
-        # Calculate start and end of today in Tehran time, then convert to UTC
-        # for database queries (Django stores timestamps in UTC)
-        today_start_tehran = datetime.datetime.combine(
-            today_tehran,
-            datetime.time.min,
-            tzinfo=tehran_tz
-        )
-        today_end_tehran = datetime.datetime.combine(
-            today_tehran,
-            datetime.time.max,
-            tzinfo=tehran_tz
-        )
-
-        # Count entry gate events today (Requirement 25.2)
-        entries_today = GateEvent.objects.filter(
-            direction='entry',
-            was_rejected=False,
-            created_at__gte=today_start_tehran,
-            created_at__lte=today_end_tehran
-        ).count()
-
-        # Count exit gate events today (Requirement 25.2)
-        exits_today = GateEvent.objects.filter(
-            direction='exit',
-            was_rejected=False,
-            created_at__gte=today_start_tehran,
-            created_at__lte=today_end_tehran
-        ).count()
-
-        # Count currently parked vehicles (Requirement 25.2)
-        currently_parked = ParkingSession.objects.filter(
-            status='parked'
-        ).count()
-
-        # Calculate revenue today from completed and waived sessions (Requirement 25.5)
-        revenue_result = ParkingSession.objects.filter(
-            status__in=['completed', 'waived'],
-            exit_time__gte=today_start_tehran,
-            exit_time__lte=today_end_tehran
-        ).aggregate(total=Sum('fee_charged'))
-
-        revenue_today = int(revenue_result['total'] or 0)
-
-        # Get capacity from settings (Requirement 25.2)
-        capacity = getattr(settings, 'PARKING_CAPACITY', 100)
-
-        return {
-            'entries_today': entries_today,
-            'exits_today': exits_today,
-            'currently_parked': currently_parked,
-            'revenue_today': revenue_today,
-            'capacity': capacity
-        }
+        return compute_live_stats()

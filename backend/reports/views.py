@@ -8,9 +8,8 @@ Requirements: 44.1, 44.2, 44.4, 44.5, 44.6, 44.7,
 
 import io
 import logging
-from datetime import datetime, date, time
+from datetime import date
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from django.db.models import Sum, Avg, Count, Q
 from django.http import HttpResponse
@@ -21,11 +20,10 @@ from rest_framework.views import APIView
 from rest_framework import status
 
 from parking.models import ParkingSession
+from utils.tehran_dates import TEHRAN_TZ, date_range_tehran, parse_date_param
 from .permissions import IsOperatorOrAdmin
 
 logger = logging.getLogger(__name__)
-
-TEHRAN_TZ = ZoneInfo('Asia/Tehran')
 
 # Persian translation maps
 PAYMENT_METHOD_FA = {
@@ -44,33 +42,13 @@ STATUS_FA = {
 
 
 def _parse_date_param(request):
-    """
-    Parse and validate the ?date=YYYY-MM-DD query parameter.
-    Returns (date_obj, error_response) — one of them will be None.
-    """
-    raw = request.query_params.get('date', '').strip()
-    if not raw:
-        return None, Response(
-            {'error': 'Query parameter "date" is required (YYYY-MM-DD)'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    try:
-        requested_date = datetime.strptime(raw, '%Y-%m-%d').date()
-    except ValueError:
-        return None, Response(
-            {'error': f'Invalid date format "{raw}". Expected YYYY-MM-DD.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    return requested_date, None
+    """Parse and validate the ?date=YYYY-MM-DD query parameter."""
+    return parse_date_param(request, required=True)
 
 
 def _date_range_utc(requested_date: date):
-    """
-    Return (start_utc, end_utc) for the given date in Asia/Tehran timezone.
-    """
-    start_tehran = datetime.combine(requested_date, time.min).replace(tzinfo=TEHRAN_TZ)
-    end_tehran = datetime.combine(requested_date, time.max).replace(tzinfo=TEHRAN_TZ)
-    return start_tehran, end_tehran
+    """Return (start, end) for the given date in Asia/Tehran timezone."""
+    return date_range_tehran(requested_date)
 
 
 def _build_summary(requested_date: date) -> dict:

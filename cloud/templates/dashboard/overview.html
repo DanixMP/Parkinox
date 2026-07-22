@@ -1,0 +1,83 @@
+{% extends "dashboard/base.html" %}
+{% load jalali_tags static %}
+{% block title %}نمای کلی | Parkinox Cloud{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>نمای کلی</h1>
+    <div class="muted">{% if site %}سایت: {{ site.name }} ({{ site.site_id }}){% else %}هنوز سایتی همگام نشده است{% endif %}</div>
+  </div>
+  <div class="topbar-actions">
+    <button type="button" class="btn accent" id="open-season-reset">پایان فصل و شروع مجدد</button>
+    {% if not local_proxy_configured %}
+    <span class="muted" style="font-size:0.8rem">بازنشانی روی ابر؛ پروکسی محلی پیکربندی نشده</span>
+    {% endif %}
+  </div>
+</div>
+
+{% if no_site %}
+<div class="panel">هنوز داده‌ای از سایت محلی دریافت نشده. پس از فعال‌سازی `sync_to_cloud` اینجا نمایش داده می‌شود.</div>
+{% else %}
+<div class="kpi-grid">
+  <a class="kpi kpi-link" href="/parked/">
+    <div class="label">پارک‌شده الان</div>
+    <div class="value">{{ stats.parked }}</div>
+  </a>
+  <div class="kpi">
+    <div class="label">ظرفیت / آزاد</div>
+    <div class="value">{{ stats.capacity }} / {{ stats.available }}</div>
+  </div>
+  <a class="kpi kpi-link" href="/history/?from={{ today_jalali|urlencode }}&to={{ today_jalali|urlencode }}">
+    <div class="label">ورود امروز</div>
+    <div class="value">{{ stats.today_entries }}</div>
+  </a>
+  <a class="kpi kpi-link" href="/history/?from={{ today_jalali|urlencode }}&to={{ today_jalali|urlencode }}&focus=exits">
+    <div class="label">خروج امروز</div>
+    <div class="value">{{ stats.today_exits }}</div>
+  </a>
+  <a class="kpi kpi-link" href="/history/?from={{ today_jalali|urlencode }}&to={{ today_jalali|urlencode }}&status=completed">
+    <div class="label">درآمد امروز (تومان)</div>
+    <div class="value">{{ stats.today_revenue|floatformat:0 }}</div>
+  </a>
+  <div class="kpi">
+    <div class="label">میانگین مدت (دقیقه)</div>
+    <div class="value">{% if stats.avg_duration %}{{ stats.avg_duration }}{% else %}—{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">آخرین همگام‌سازی</div>
+    <div class="value" style="font-size:1rem">{{ stats.last_sync_at|jalali:'time' }}</div>
+  </div>
+  <a class="kpi kpi-link" href="/fails/">
+    <div class="label">بررسی دستی در انتظار</div>
+    <div class="value">{{ stats.pending_fails }}</div>
+    <div class="hint">تصاویر رویداد در انتظار: {{ stats.pending_images }}</div>
+  </a>
+</div>
+{% endif %}
+
+<dialog id="season-reset-dialog" class="season-dialog">
+  <form method="post" action="/season/reset/">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="/">
+    <h2>شروع فصل جدید؟</h2>
+    <p class="muted">جلسات پارک‌شده و تشخیص‌های در انتظار روی ابر پاک می‌شوند. در صورت پیکربندی، سایت محلی نیز فراخوانی می‌شود.</p>
+    <label>رمز عبور داشبورد</label>
+    <input type="password" name="password" required autocomplete="current-password">
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" id="close-season-reset">انصراف</button>
+      <button type="submit" class="btn accent">تأیید پایان فصل</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const dlg = document.getElementById('season-reset-dialog');
+  const openBtn = document.getElementById('open-season-reset');
+  const closeBtn = document.getElementById('close-season-reset');
+  if (openBtn && dlg) openBtn.addEventListener('click', () => dlg.showModal());
+  if (closeBtn && dlg) closeBtn.addEventListener('click', () => dlg.close());
+})();
+</script>
+{% endblock %}

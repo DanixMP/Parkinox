@@ -1,0 +1,39 @@
+{% extends "dashboard/base.html" %}
+{% load jalali_tags static %}
+{% block title %}جستجو | Parkinox Cloud{% endblock %}
+{% block content %}
+<div class="topbar"><div><h1>جستجوی پلاک</h1></div></div>
+<div class="panel">
+  <form class="filters" method="get" style="flex-direction:column;align-items:stretch">
+    {% include "dashboard/_plate_input.html" with plate_value=plate %}
+    <div><button type="submit">جستجو</button></div>
+  </form>
+  <h2>جلسات</h2>
+  <table class="data">
+    <thead><tr><th>پلاک</th><th>ورود</th><th>خروج</th><th>وضعیت</th><th></th></tr></thead>
+    <tbody>
+    {% for s in sessions %}
+      <tr>
+        <td>{{ s.plate_number }}</td>
+        <td>{{ s.entry_time|jalali:'time' }}</td>
+        <td>{{ s.exit_time|jalali:'time' }}</td>
+        <td>{{ s.status }}</td><td><a href="/sessions/{{ s.session_uuid }}/">جزئیات</a></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5">موردی نیست</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <h2>رویدادهای گیت</h2>
+  <table class="data">
+    <thead><tr><th>زمان</th><th>جهت</th><th>پلاک</th><th>دوربین</th></tr></thead>
+    <tbody>
+    {% for e in events %}
+      <tr><td>{{ e.occurred_at|jalali:'time' }}</td><td>{{ e.direction }}</td><td>{{ e.plate_confirmed }}</td><td>{{ e.camera_id }}</td></tr>
+    {% empty %}
+      <tr><td colspan="4">موردی نیست</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -113,12 +113,12 @@ python -c "from plate_detector import PlateDetector; d = PlateDetector(); print(
 python fastapi_app.py
 ```
 
-Server listens on `http://0.0.0.0:8000`
+Server listens on `http://0.0.0.0:8002`
 
 ### 5. Health check
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8002/health
 ```
 
 Expected:
@@ -132,7 +132,7 @@ Expected:
 }
 ```
 
-Interactive docs: http://localhost:8000/docs
+Interactive docs: http://localhost:8002/docs
 
 ---
 
@@ -184,7 +184,7 @@ Use the superuser **phone number** in operator settings (Parkinox uses phone-bas
 python manage.py runserver 8001
 ```
 
-> **Note:** Django runs on **8001** so FastAPI can use **8000**.
+> **Note:** Django runs on **8001** and FastAPI runs on **8002**.
 
 ### 6. Health check
 
@@ -227,7 +227,7 @@ In the app: **Settings → Server addresses**
 
 | Field | Default |
 |-------|---------|
-| FastAPI | `http://localhost:8000` |
+| FastAPI | `http://localhost:8002` |
 | Django API | `http://localhost:8001/api` |
 | WebSocket | `ws://localhost:8001/ws/panel/` |
 | Superuser phone | Your Django superuser phone |
@@ -256,7 +256,7 @@ run_all.bat
 
 Sequence:
 
-1. FastAPI starts in new terminal (port 8000)
+1. FastAPI starts in new terminal (port 8002)
 2. 3-second wait for model load
 3. Django starts in new terminal (port 8001)
 4. Operator app launches (builds Windows exe if missing)
@@ -294,13 +294,14 @@ GET /health → models_loaded: false
 - Test RTSP in VLC: `rtsp://user:pass@ip:554/Streaming/Channels/101`
 - Ensure FFmpeg is on PATH (OpenCV backend)
 - Try sub-stream channel `102` (lower bandwidth)
-- Check `GET http://localhost:8000/cameras/status`
+- Check `GET http://localhost:8002/cameras/status`
 
-### Flutter: no MJPEG preview
+### Flutter: no RTSP preview
 
 - FastAPI must be running
 - Camera config must be synced (`POST /cameras/config` — happens on save)
-- URL must match: `http://localhost:8000/cameras/entry/mjpeg`
+- Ensure camera URL is valid RTSP (`.../Streaming/Channels/101`)
+- Flutter preview uses sub-stream channel `102`
 - Firewall blocking localhost HTTP
 
 ### Flutter: plates detected but no approval UI

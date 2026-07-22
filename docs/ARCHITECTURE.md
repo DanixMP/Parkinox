@@ -54,7 +54,7 @@ graph LR
 | Django HTTP | Dio with JWT interceptors |
 | FastAPI detection WS | `WebSocketService` → `fastApiDetectionControllerProvider` |
 | Django panel WS | `websocket_provider` → `ParkingConsumer` |
-| Camera preview (IP) | `MjpegPreview` ← FastAPI MJPEG |
+| Camera preview (IP) | `RtspPreview` (`media_kit`) on RTSP sub-stream (102) |
 | Camera capture (USB) | `camera` package → `POST /detect` |
 | Plate approval UI | `DetectionApprovalPanel`, countdown timers |
 
@@ -62,7 +62,7 @@ graph LR
 
 | Provider | Role |
 |----------|------|
-| `fastApiDetectionControllerProvider` | Connects to `ws://localhost:8000/ws`, routes `plate_detected` |
+| `fastApiDetectionControllerProvider` | Connects to `ws://localhost:8002/ws`, routes `plate_detected` |
 | `entryContinuousDetectionProvider` / `exitContinuousDetectionProvider` | Detection state + approval queue |
 | `parkingProvider` | Gate events, sessions, Django sync |
 | `settingsProvider` | Endpoints, camera config; syncs to FastAPI on save |
@@ -74,7 +74,7 @@ graph LR
 |--------|------|
 | `fastapi_app.py` | HTTP API, WebSocket hub, lifespan hooks |
 | `plate_detector.py` | Two-stage YOLO: plate bbox → character decode |
-| `camera_stream_service.py` | RTSP threads, MJPEG buffer, periodic detection |
+| `camera_stream_service.py` | RTSP threads and periodic detection |
 
 **Camera worker lifecycle:**
 
@@ -90,7 +90,6 @@ CameraManager.apply_config()
                 ▼
          Thread: cv2.VideoCapture(RTSP)
                 │
-                ├── encode JPEG → MJPEG buffer
                 └── every 3s → detector.detect(frame)
                               │
                               └── on_detection → WebSocket broadcast
@@ -135,7 +134,7 @@ RTSP camera
 Preview path (parallel):
 
 ```
-RTSP → JPEG buffer → GET /cameras/entry/mjpeg → MjpegPreview widget
+RTSP channel 102 → RtspPreview (media_kit hardware decode)
 ```
 
 ### Flow B — USB / webcam
@@ -245,7 +244,7 @@ On dashboard bootstrap (`session_bootstrap_provider`):
 |----------|-----------|
 | FastAPI over Flask for Core | Async, OpenAPI, WebSocket native, better concurrency |
 | Detection on operator PC | Low latency, no video egress, GPU on gate machine |
-| MJPEG over WebRTC for preview | Simple HTTP multipart; easy Flutter parser; no signaling server |
+| media_kit RTSP sub-stream preview | Low-latency hardware decode on operator machine |
 | Riverpod | Compile-safe, testable state for complex detection + WS flows |
 | SQLite local + Django remote | Offline resilience for operator entries; authoritative server state |
 | YOLOv5 two-stage | Proven accuracy on Iranian plate format in this project |
@@ -266,7 +265,7 @@ parkinox_op/lib/
 │   └── session_bootstrap_provider.dart
 └── ui/
     ├── dashboard/components/camera_panel.dart
-    ├── shared/mjpeg_preview.dart
+    ├── shared/rtsp_preview.dart
     └── settings/widgets/ip_camera_config_field.dart
 
 Core/

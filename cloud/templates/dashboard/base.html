@@ -1,0 +1,58 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Parkinox Cloud{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+  <link rel="stylesheet" href="{% static 'css/plate-input.css' %}">
+  <link rel="stylesheet" href="{% static 'css/jalali-datepicker.css' %}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+{% if request.path != '/login/' %}
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logos">
+        <img src="{% static 'img/iau_logo.png' %}" alt="دانشگاه آزاد اسلامی" class="brand-logo">
+        <div class="brand-text">
+          <span class="brand-name">پارکینوکس</span>
+          <small>مدیریت و گزارش‌گیری پارکینگ</small>
+        </div>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="/" class="{% if request.path == '/' %}active{% endif %}">نمای کلی</a>
+      <a href="/parked/" class="{% if '/parked' in request.path %}active{% endif %}">خودروهای پارک‌شده</a>
+      <a href="/history/" class="{% if '/history' in request.path %}active{% endif %}">تاریخچه</a>
+      <a href="/search/" class="{% if '/search' in request.path %}active{% endif %}">جستجو</a>
+      <a href="/fails/" class="{% if '/fails' in request.path %}active{% endif %}">تشخیص‌های ناموفق</a>
+      <a href="/reports/" class="{% if '/reports' in request.path %}active{% endif %}">گزارش‌ها</a>
+      <a href="/analytics/" class="{% if '/analytics' in request.path %}active{% endif %}">تحلیل و نمودار</a>
+      <a href="/sync/" class="{% if '/sync' in request.path %}active{% endif %}">وضعیت همگام‌سازی</a>
+      <a href="/logout/">خروج</a>
+    </nav>
+  </aside>
+  <main class="main">
+    {% if messages %}
+    <div class="flash-stack">
+      {% for message in messages %}
+        <div class="flash {% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% else %}
+  {% block login_content %}{% endblock %}
+{% endif %}
+<script src="{% static 'js/plate-input.js' %}"></script>
+<script src="{% static 'js/jalali-datepicker.js' %}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

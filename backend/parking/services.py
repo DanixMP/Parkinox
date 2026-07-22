@@ -10,6 +10,7 @@ Requirements: 15.1, 15.2, 15.3, 15.4, 15.5, 17.1, 17.2, 17.3, 17.4, 17.5, 17.6, 
              80.1, 80.2, 80.3, 80.4, 80.5
 """
 
+import logging
 from django.db import transaction
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils import timezone
@@ -26,6 +27,8 @@ from .plate_utils import (
 from plates.models import Plate
 from wallets.services import WalletService, InsufficientFundsError
 from utils.fee_calculator import calculate_fee
+
+logger = logging.getLogger(__name__)
 
 
 class ParkingSessionService:
@@ -370,7 +373,18 @@ class ParkingSessionService:
                 session.notes = f"Cash payment: {notes}"
         
         session.save()
-        
+
+        sid = session.id
+
+        def _enqueue():
+            try:
+                from .sync_outbox import enqueue_parking_session_update
+
+                enqueue_parking_session_update(sid)
+            except Exception:
+                logger.exception('Outbox enqueue after cash payment failed session=%s', sid)
+
+        transaction.on_commit(_enqueue)
         return session
     
     @staticmethod
@@ -426,5 +440,16 @@ class ParkingSessionService:
         session.collected_by_id = operator_id
         
         session.save()
-        
+
+        sid = session.id
+
+        def _enqueue():
+            try:
+                from .sync_outbox import enqueue_parking_session_update
+
+                enqueue_parking_session_update(sid)
+            except Exception:
+                logger.exception('Outbox enqueue after waive failed session=%s', sid)
+
+        transaction.on_commit(_enqueue)
         return session

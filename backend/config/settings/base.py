@@ -128,6 +128,33 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# Shared secret for Core → Django detection-fail ingest (header X-Fail-Ingest-Token)
+DETECTION_FAIL_INGEST_TOKEN = config(
+    'DETECTION_FAIL_INGEST_TOKEN',
+    default='dev-fail-ingest-token',
+)
+
+# ---------------------------------------------------------------------------
+# Cloud reporting replica sync (local-first outbox). Disabled by default.
+# ---------------------------------------------------------------------------
+CLOUD_SYNC_ENABLED = config('CLOUD_SYNC_ENABLED', default=False, cast=bool)
+CLOUD_BASE_URL = config('CLOUD_BASE_URL', default='http://127.0.0.1:8010')
+CLOUD_SITE_ID = config('CLOUD_SITE_ID', default='pilot-main')
+CLOUD_SITE_INGEST_TOKEN = config(
+    'CLOUD_SITE_INGEST_TOKEN',
+    default='dev-site-ingest-token',
+)
+# Local FastAPI success-capture finalize (never on critical path beyond fire-and-forget)
+SUCCESS_CAPTURE_FASTAPI_URL = config(
+    'SUCCESS_CAPTURE_FASTAPI_URL',
+    default='http://127.0.0.1:8002',
+)
+SUCCESS_CAPTURE_ENABLED = config('SUCCESS_CAPTURE_ENABLED', default=True, cast=bool)
+
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -160,7 +187,7 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=5),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,
