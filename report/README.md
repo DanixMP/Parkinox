@@ -1,16 +1,19 @@
 # Parkinox Reports
 
-Blue-themed success and data analytics documents generated from operational session export.
+Blue-themed success and data analytics documents (English + Persian) generated from the operational session export.
 
 ## Outputs
 
 | File | Description |
 |------|-------------|
-| `Parkinox_Success_Report.docx` | System success narrative, architecture, error handling, Iranian plate ledger (all sessions), and charts |
-| `Parkinox_Data_Analytics_Report.docx` | CSV-only analytics: measured date/time charts, daily/hourly tables, duration & fee stats |
-| `charts/` | PNG charts shared by both documents |
+| `Parkinox_Success_Report.docx` | English success narrative, architecture, error handling, Iranian plate ledger, charts |
+| `Parkinox_Success_Report_FA.docx` | **Persian RTL** edition of the success report |
+| `Parkinox_Data_Analytics_Report.docx` | English CSV-only analytics |
+| `Parkinox_Data_Analytics_Report_FA.docx` | **Persian RTL** edition of the data analytics report |
+| `charts/` | PNG charts (English + `fa_*` Persian-labeled) |
 | `plates/` | Cached Iranian-style plate badge PNGs |
 | `parkinox_sessions.csv` | Source session export |
+| `generate_reports.py` / `persian_reports.py` | Generators |
 
 ## Regenerate
 

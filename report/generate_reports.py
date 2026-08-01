@@ -2,9 +2,9 @@
 """
 Parkinox Success Report generator.
 
-Produces:
-  1) Parkinox_Success_Report.docx  — system success narrative + session plates + charts
-  2) Parkinox_Data_Analytics_Report.docx — CSV-only analytics with charts
+Produces (English + Persian):
+  1) Parkinox_Success_Report.docx / _FA.docx
+  2) Parkinox_Data_Analytics_Report.docx / _FA.docx
 """
 
 from __future__ import annotations
@@ -958,31 +958,53 @@ def main() -> None:
         get_plate_image(plate)
     print(f"Plate images in {PLATES}")
 
-    print("Building charts…")
+    print("Building English charts…")
     charts = build_charts(df)
     stats = compute_stats(df)
 
-    print("Writing Success Report DOCX…")
+    print("Writing English Success Report DOCX…")
     success = build_success_report(df, charts, stats)
     print(f"  → {success}")
 
-    print("Writing Data Analytics DOCX…")
+    print("Writing English Data Analytics DOCX…")
     data = build_data_report(df, charts, stats)
     print(f"  → {data}")
+
+    # Persian (RTL) editions
+    from persian_reports import (
+        build_charts_fa,
+        build_data_report_fa,
+        build_success_report_fa,
+    )
+
+    print("Building Persian charts…")
+    charts_fa = build_charts_fa(df)
+
+    print("Writing Persian Success Report DOCX…")
+    success_fa = build_success_report_fa(df, charts_fa, stats)
+    print(f"  → {success_fa}")
+
+    print("Writing Persian Data Analytics DOCX…")
+    data_fa = build_data_report_fa(df, charts_fa, stats)
+    print(f"  → {data_fa}")
 
     # Write a short README for the report folder
     readme = ROOT / "README.md"
     readme.write_text(
         "# Parkinox Reports\n\n"
-        "Blue-themed success and data analytics documents generated from operational session export.\n\n"
+        "Blue-themed success and data analytics documents (English + Persian) "
+        "generated from the operational session export.\n\n"
         "## Outputs\n\n"
         "| File | Description |\n"
         "|------|-------------|\n"
-        "| `Parkinox_Success_Report.docx` | System success narrative, architecture, error handling, Iranian plate ledger (all sessions), and charts |\n"
-        "| `Parkinox_Data_Analytics_Report.docx` | CSV-only analytics: measured date/time charts, daily/hourly tables, duration & fee stats |\n"
-        "| `charts/` | PNG charts shared by both documents |\n"
+        "| `Parkinox_Success_Report.docx` | English success narrative, architecture, error handling, Iranian plate ledger, charts |\n"
+        "| `Parkinox_Success_Report_FA.docx` | **Persian RTL** edition of the success report |\n"
+        "| `Parkinox_Data_Analytics_Report.docx` | English CSV-only analytics |\n"
+        "| `Parkinox_Data_Analytics_Report_FA.docx` | **Persian RTL** edition of the data analytics report |\n"
+        "| `charts/` | PNG charts (English + `fa_*` Persian-labeled) |\n"
         "| `plates/` | Cached Iranian-style plate badge PNGs |\n"
-        "| `parkinox_sessions.csv` | Source session export |\n\n"
+        "| `parkinox_sessions.csv` | Source session export |\n"
+        "| `generate_reports.py` / `persian_reports.py` | Generators |\n\n"
         "## Regenerate\n\n"
         "```bash\n"
         "pip install python-docx matplotlib pillow pandas\n"
