@@ -303,7 +303,7 @@ python manage.py test
 ---
 
 ## License
-
+-NOT OPEN SOURCE
 [UNIVERSITY PROJECT ONLY.]
 
 ---
